@@ -129,8 +129,12 @@ export async function buildDistFromGithub(spec, rootDir, token, log) {
   const env = { ...process.env, CI: '1' }
   log('源码树 pnpm install…')
   await run(binOf('pnpm'), ['install'], { cwd: srcDir, env, log })
-  log('源码树 pnpm build（完整 monorepo 构建，可能需要数分钟）…')
-  await run(binOf('pnpm'), ['build'], { cwd: srcDir, env, log })
+  log('源码树 pnpm build:official（release:pack 校验 client 构建画像，完整构建需数分钟）…')
+  const built = await run(binOf('pnpm'), ['build:official'], { cwd: srcDir, env, log, allowFailure: true })
+  if (built.code !== 0) {
+    log('build:official 不可用，回退 pnpm build（release:pack 的画像校验可能不通过）…')
+    await run(binOf('pnpm'), ['build'], { cwd: srcDir, env, log })
+  }
   log('release:pack（dsh 家族）…')
   await run(binOf('pnpm'), ['release:pack', '--family', 'dsh'], { cwd: srcDir, env, log })
   if (!existsSync(distDir)) {
