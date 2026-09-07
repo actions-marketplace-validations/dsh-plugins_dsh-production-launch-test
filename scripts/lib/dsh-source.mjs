@@ -131,8 +131,8 @@ export async function buildDistFromGithub(spec, rootDir, token, log) {
   await run(binOf('pnpm'), ['install'], { cwd: srcDir, env, log })
   log('源码树 pnpm build（完整 monorepo 构建，可能需要数分钟）…')
   await run(binOf('pnpm'), ['build'], { cwd: srcDir, env, log })
-  log('release:pack…')
-  await run(binOf('pnpm'), ['release:pack'], { cwd: srcDir, env, log })
+  log('release:pack（dsh 家族）…')
+  await run(binOf('pnpm'), ['release:pack', '--family', 'dsh'], { cwd: srcDir, env, log })
   if (!existsSync(distDir)) {
     throw new Error(`release:pack 后未找到 ${distDir}`)
   }
