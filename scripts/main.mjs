@@ -11,7 +11,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { detectDesktop, mapLocale, nodeVersionOk, readInputs } from './lib/env.mjs'
+import { detectDesktop, ensureCjkFonts, mapLocale, nodeVersionOk, readInputs } from './lib/env.mjs'
 import { installDsh, mergeSettingsYaml, prepareProfile, spawnDsh } from './lib/install.mjs'
 import { createLogger, scanLogs } from './lib/logs.mjs'
 import { materializePlugin, parsePluginsInput, readBundles } from './lib/plugins.mjs'
@@ -72,6 +72,7 @@ async function main() {
     log('=== 预检 ===')
     const desktop = detectDesktop()
     if (!desktop.ok) throw new Error(desktop.reason)
+    await ensureCjkFonts(inputs.lang, log)
     if (!nodeVersionOk()) {
       throw new Error(`Node ${process.version} 不满足 DSH engines（^22.19.0 || >=24）；`
         + `请先 actions/setup-node@v4 安装 node ${inputs.nodeVersion}`)

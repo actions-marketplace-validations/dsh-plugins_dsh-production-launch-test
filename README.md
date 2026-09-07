@@ -35,6 +35,7 @@ Given a DSH version, this action:
 | Node | `^22.19.0 \|\| >=24` (DSH engines). Run `actions/setup-node@v4` before this action. |
 | Chrome | System Chrome, used via playwright-core `channel: 'chrome'`. Preinstalled on all GitHub-hosted desktop runners. |
 | pnpm | The action self-provisions pnpm 11.17 when missing (corepack first, falling back to `npm i -g`). |
+| CJK fonts | With a `zh*` `lang` on Linux the action checks `fc-list :lang=zh` and tries `apt-get install fonts-noto-cjk` when empty (failure only warns; screenshots may show tofu □). Windows / macOS ship CJK fonts already. |
 | Permissions | Workflows using `artifact:` plugin specs must grant `actions: read` (artifacts are downloaded through the REST API). |
 
 Logs and screenshots are uploaded by a nested `actions/upload-artifact` step inside the

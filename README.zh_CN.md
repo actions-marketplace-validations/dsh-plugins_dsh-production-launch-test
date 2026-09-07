@@ -33,6 +33,7 @@
 | Node | `^22.19.0 \|\| >=24`（DSH engines）。请先运行 `actions/setup-node@v4`。 |
 | Chrome | 系统 Chrome，经 playwright-core `channel: 'chrome'` 调用。GitHub 托管的桌面 runner 均已预装。 |
 | pnpm | 缺失时由 action 自备 pnpm 11.17（corepack 优先，退回 `npm i -g`）。 |
+| 中文字体 | `lang` 为 zh 系且运行在 Linux 时，action 自动检测 `fc-list :lang=zh`，缺失则尝试 `apt-get install fonts-noto-cjk`（装不上仅告警，截图可能出现豆腐块 □）。Windows / macOS 自带中文字体，无需处理。 |
 | 权限 | 用到 `artifact:` 插件规格时，工作流需授予 `actions: read`（artifact 经 REST API 下载）。 |
 
 日志与截图由 action 内嵌的 `actions/upload-artifact` 步骤上传
