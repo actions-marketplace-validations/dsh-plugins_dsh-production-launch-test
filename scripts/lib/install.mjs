@@ -24,9 +24,17 @@ const ALLOW_BUILDS = [
   'protobufjs',
 ]
 
-function pnpmWorkspaceYaml() {
-  const builds = ALLOW_BUILDS.map(name => `  ${name}: true`).join('\n')
-  return `packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n\nallowBuilds:\n${builds}\n`
+/**
+ * 生成 pnpm-workspace.yaml。
+ * 版本安装目录用 isolated 默认 linker 且保持 autoInstallPeers 开启
+ * （dsh 内部包之间存在可选 peer 依赖，关掉会在启动时 ERR_MODULE_NOT_FOUND）；
+ * profile 目录按 .test 模板用 hoisted + autoInstallPeers:false。
+ */
+function pnpmWorkspaceYaml({ forProfile = false } = {}) {
+  // 键含 @ / / 等 YAML 指示符，必须加引号
+  const builds = ALLOW_BUILDS.map(name => `  "${name}": true`).join('\n')
+  const linker = forProfile ? '\nnodeLinker: hoisted\nautoInstallPeers: false\n' : '\n'
+  return `packages:\n  - .\n${linker}\nallowBuilds:\n${builds}\n`
 }
 
 /** UTF-8 无 BOM 写入（Windows PowerShell 的 Set-Content -Encoding UTF8 会带 BOM，这里用 Node 写天然无 BOM）。 */
@@ -49,10 +57,21 @@ export async function installDsh({ version, rootDir, log }) {
   await mkdir(versionDir, { recursive: true })
   await writeText(join(versionDir, 'pnpm-workspace.yaml'), pnpmWorkspaceYaml())
   log(`安装 @deepseek-ai/dsh@${version} → ${versionDir}`)
-  await run(binOf('pnpm'), [
-    'install', '--prefix', versionDir, '--store-dir', storeDir,
-    `@deepseek-ai/dsh@${version}`,
-  ], { log })
+  let lastError
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await run(binOf('pnpm'), [
+        'install', '--prefix', versionDir, '--store-dir', storeDir,
+        `@deepseek-ai/dsh@${version}`,
+      ], { log })
+      lastError = undefined
+      break
+    } catch (error) {
+      lastError = error
+      log(`安装第 ${attempt} 次失败（${error instanceof Error ? error.message : String(error)}），${attempt < 3 ? '重试…' : '放弃'}`)
+    }
+  }
+  if (lastError !== undefined) throw lastError
   if (!existsSync(bin)) {
     throw new Error(`安装完成但未找到 ${bin}，请确认 npm 上存在 @deepseek-ai/dsh@${version}`)
   }
@@ -141,7 +160,7 @@ export async function prepareProfile({ bin, homeDir, profile, log }) {
     log(`测试 profile 已创建：${profileDir}`)
   }
   // 无论新建与否都保证 allowBuilds 在位
-  await writeText(join(profileDir, 'pnpm-workspace.yaml'), pnpmWorkspaceYaml())
+  await writeText(join(profileDir, 'pnpm-workspace.yaml'), pnpmWorkspaceYaml({ forProfile: true }))
   return profileDir
 }
 

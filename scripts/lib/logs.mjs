@@ -2,16 +2,18 @@
  * logs — 日志采集与失败模式扫描。
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 /**
  * 创建一个行日志器：追加写入文件并回显到 action 控制台。
+ * 创建时即落空文件，保证 artifacts 中始终存在该日志。
  * @param {string} filePath
  * @returns {(line: string) => void}
  */
 export function createLogger(filePath) {
   mkdirSync(dirname(filePath), { recursive: true })
+  writeFileSync(filePath, '', 'utf8')
   return line => {
     const stamped = `[${new Date().toISOString()}] ${line}`
     try {

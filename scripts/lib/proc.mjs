@@ -15,16 +15,25 @@ import { spawn } from 'node:child_process'
  */
 export function run(command, args, options = {}) {
   const { cwd, env, log = () => {}, redact = [], allowFailure = false } = options
-  const displayArgs = args.map(arg => redact.reduce((text, secret) =>
-    secret === '' ? text : text.split(secret).join('***'), text))
+  const displayArgs = args.map(arg => redact.reduce((acc, secret) =>
+    secret === '' ? acc : acc.split(secret).join('***'), arg))
   log(`$ ${command} ${displayArgs.join(' ')}`)
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: env ?? process.env,
-      shell: false,
-      windowsHide: true,
-    })
+    // Windows 上 .cmd/.bat 入口必须经 shell 解析（Node >=20 直接 spawn 会 EINVAL）
+    const needsShell = process.platform === 'win32' && /\.(?:cmd|bat)$/iu.test(command)
+    const child = needsShell
+      ? spawn([command, ...args.map(arg => (arg.includes(' ') ? `"${arg}"` : arg))].join(' '), {
+          cwd,
+          env: env ?? process.env,
+          shell: true,
+          windowsHide: true,
+        })
+      : spawn(command, args, {
+          cwd,
+          env: env ?? process.env,
+          shell: false,
+          windowsHide: true,
+        })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', chunk => {
