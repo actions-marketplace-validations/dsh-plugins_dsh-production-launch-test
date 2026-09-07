@@ -13,8 +13,8 @@
 给定一个 DSH 版本，本 action 会：
 
 1. 校验 runner 确实带有**桌面环境**（没有则直接失败）；
-2. 用 pnpm 把 `@deepseek-ai/dsh@<dsh-version>` 隔离安装到独立目录
-   （与 `.test` 相同的多版本隔离方案：独立安装目录 + 独立 `DSH_HOME`）；
+2. 用 pnpm 把 `@deepseek-ai/dsh@<dsh-version>` 隔离安装到按版本独立的目录，
+   并使用独立的 `DSH_HOME`，不会触碰你本机真实的 DSH 安装；
 3. 准备测试 profile 并安装指定插件；
 4. 可选启动**模拟 LLM** 服务（固定输入 → 固定输出），覆盖
    `openai-completions` / `openai-responses` / `anthropic-messages` 三种协议，
@@ -87,7 +87,7 @@ jobs:
 - dsh 版本清单：npm `@deepseek-ai/dsh` 全部版本 ∪ GitHub Releases（`dsh-v*` tag），
   取 ≥ `0.1.0-rc.6`；npm 上缺失的版本（如 `0.1.2-alpha.1` / `0.1.3-alpha.1`）由 action
   自动从源码构建安装；
-- 7 个工作区插件（`dsh-thought-buddy`、`dsh-approve-for-me`、`dsh-auxiliary`、
+- 7 个 DSH 生态插件（`dsh-thought-buddy`、`dsh-approve-for-me`、`dsh-auxiliary`、
   `dsh-better-sidebar-loader`、`dsh-code-review`、`dsh-loader`、`dsh-network-settings`）
   的 npm dist-tags 在 `latest` 与 `next` 中取较新者，全部装进同一个测试 profile；
 
@@ -167,6 +167,11 @@ provider 路由（`sim-<协议>`），暴露模型 `test-model`，因此可以�
 | --- | --- |
 | `click(text, opts?)` | 按 role（`button`/`link`/`menuitem`/`tab`，先精确后模糊）点击，回退到可见文本。 |
 | `sendMessage(text)` | 聚焦聊天输入框、填入文本并按 Enter 提交；页面没有可见输入框时（例如还停在“选择工作区”欢迎页）回退到 `session/prompt` RPC 提交。 |
+| `selectModel('provider/model')` | 经页面自身的 `session.selectModel` RPC 在最近一个会话上切换模型。 |
+| `screenshot(name?)` | 保存 `artifacts/screenshots/NN-<name>.png`，返回路径。 |
+| `waitFor(text, timeoutMs?)` | 等待 `text` 在页面可见（默认 15s）。 |
+| `sleep(ms)` | 等待指定毫秒。 |
+| `currentUrl()` | 返回当前页面 URL。 |
 
 > 首次启动会弹「内测声明」弹窗，用 `try { await click('继续'); } catch {}` 关闭
 > （英文界面为 `click('Continue')`）。
@@ -174,11 +179,6 @@ provider 路由（`sim-<协议>`），暴露模型 `test-model`，因此可以�
 > DSH 会话始终声明工具，所以模拟 LLM 会话首轮命中规则 2（固定工具调用），
 > 随后命中规则 1（收尾文本 `工具结果已收到，任务完成。`）；断言请针对收尾文本，
 > 而不是纯文本回显。
-| `selectModel('provider/model')` | 经页面自身的 `session.selectModel` RPC 在最近一个会话上切换模型。 |
-| `screenshot(name?)` | 保存 `artifacts/screenshots/NN-<name>.png`，返回路径。 |
-| `waitFor(text, timeoutMs?)` | 等待 `text` 在页面可见（默认 15s）。 |
-| `sleep(ms)` | 等待指定毫秒。 |
-| `currentUrl()` | 返回当前页面 URL。 |
 
 脚本被包装为 `async () => { … }`，可直接顶层 `await`。脚本抛错会让 action 失败。
 

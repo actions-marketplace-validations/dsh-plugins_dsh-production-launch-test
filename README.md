@@ -13,8 +13,8 @@ English | [简体中文](README.zh_CN.md)
 Given a DSH version, this action:
 
 1. Verifies the runner actually has a **desktop environment** (fails fast otherwise);
-2. Installs `@deepseek-ai/dsh@<dsh-version>` into an isolated directory with pnpm
-   (the same isolated multi-version scheme as `.test`: separate install dir + separate `DSH_HOME`);
+2. Installs `@deepseek-ai/dsh@<dsh-version>` into an isolated per-version directory with pnpm,
+   with its own `DSH_HOME`, so runs never touch your real DSH installation;
 3. Prepares a test profile and installs the requested plugins;
 4. Optionally starts a **simulated LLM** server (fixed-input → fixed-output) covering the
    `openai-completions` / `openai-responses` / `anthropic-messages` protocols, and wires it
@@ -89,7 +89,7 @@ See [examples/basic.yml](examples/basic.yml) for a complete plugin-repo workflow
 - every DSH version ≥ `0.1.0-rc.6` from npm ∪ GitHub Releases (`dsh-v*` tags) — versions
   that exist only on GitHub (e.g. `0.1.2-alpha.1`, `0.1.3-alpha.1`) are built from source
   automatically by the action itself;
-- the newest of each plugin's `latest`/`next` npm dist-tags for the seven workspace
+- the newest of each plugin's `latest`/`next` npm dist-tags for seven DSH ecosystem
   plugins (`dsh-thought-buddy`, `dsh-approve-for-me`, `dsh-auxiliary`,
   `dsh-better-sidebar-loader`, `dsh-code-review`, `dsh-loader`, `dsh-network-settings`),
   all installed into one shared profile;
@@ -171,6 +171,11 @@ Injected as page globals before your script runs (all async):
 | --- | --- |
 | `click(text, opts?)` | Clicks by role (`button`/`link`/`menuitem`/`tab`, exact then fuzzy) falling back to visible text. |
 | `sendMessage(text)` | Focuses the chat composer, fills it and submits with Enter; falls back to the `session/prompt` RPC when no composer is visible (e.g. the workspace picker is still showing). |
+| `selectModel('provider/model')` | Calls the page's own `session.selectModel` RPC on the most recent session. |
+| `screenshot(name?)` | Saves `artifacts/screenshots/NN-<name>.png`; returns the path. |
+| `waitFor(text, timeoutMs?)` | Waits until `text` is visible (default 15s). |
+| `sleep(ms)` | Sleeps. |
+| `currentUrl()` | Returns the current page URL. |
 
 > First boot shows the beta-notice modal — dismiss it with `try { await click('继续'); } catch {}`
 > (or `click('Continue')` in English).
@@ -178,11 +183,6 @@ Injected as page globals before your script runs (all async):
 > DSH sessions always declare tools, so a simulated-LLM conversation hits rule 2 first
 > (a fixed tool call) and then rule 1 (the closing text `工具结果已收到，任务完成。`);
 > assert on that instead of the plain-text echo.
-| `selectModel('provider/model')` | Calls the page's own `session.selectModel` RPC on the most recent session. |
-| `screenshot(name?)` | Saves `artifacts/screenshots/NN-<name>.png`; returns the path. |
-| `waitFor(text, timeoutMs?)` | Waits until `text` is visible (default 15s). |
-| `sleep(ms)` | Sleeps. |
-| `currentUrl()` | Returns the current page URL. |
 
 The script is wrapped as `async () => { … }`, so top-level `await` works. A thrown error
 fails the action.

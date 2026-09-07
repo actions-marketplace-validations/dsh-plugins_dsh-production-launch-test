@@ -1,7 +1,7 @@
 /**
  * install — DSH 隔离安装、profile 准备与进程控制。
  *
- * 与 .test 目录的约定一致：
+ * 约定：
  *   - 每个版本 `pnpm install --prefix versions/<ver> --store-dir <共享 store>` 独立安装；
  *   - 独立的 DSH_HOME，启动入口为 node <ver>/node_modules/@deepseek-ai/dsh/lib/bin.js；
  *   - pnpm-workspace.yaml 需显式 allowBuilds 白名单（pnpm 11.17 不认 onlyBuiltDependencies）；
@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { binOf, killTree, run } from './proc.mjs'
 
-/** pnpm 11.17 需要的构建脚本白名单（见 .test 测试记录六）。 */
+/** pnpm 11.17 需要的构建脚本白名单（本地依赖 esbuild/koffi/node-pty 等原生构建）。 */
 const ALLOW_BUILDS = [
   '@deepseek-ai/dsh-subprocess-local',
   '@google/genai',
@@ -28,7 +28,7 @@ const ALLOW_BUILDS = [
  * 生成 pnpm-workspace.yaml。
  * 版本安装目录用 isolated 默认 linker 且保持 autoInstallPeers 开启
  * （dsh 内部包之间存在可选 peer 依赖，关掉会在启动时 ERR_MODULE_NOT_FOUND）；
- * profile 目录按 .test 模板用 hoisted + autoInstallPeers:false。
+ * profile 目录用 hoisted + autoInstallPeers:false（插件依赖必须提升可见、peer 不自动装）。
  */
 function pnpmWorkspaceYaml({ forProfile = false } = {}) {
   // 键含 @ / / 等 YAML 指示符，必须加引号

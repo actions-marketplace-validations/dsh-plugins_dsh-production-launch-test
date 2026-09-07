@@ -1,7 +1,7 @@
 /**
  * dsh-source — npm 上不存在的 dsh 版本自动走源码构建安装。
  *
- * 流程与 .test 对 0.1.2-alpha.1 的做法一致：
+ * 流程：
  *   clone deepseek-ai/deepseek-harness@dsh-v<version>
  *   → pnpm install + build:official + release:pack --family dsh
  *   → dist/npm/deepseek-ai-*.tgz 全部以 file: 依赖 + overrides 钉进版本目录

@@ -33,7 +33,7 @@ export const HOST_FAILURE_PATTERNS = [
   /PLUGIN_LOAD_FAILURE/iu,
 ]
 
-/** 网页控制台失败模式（DSH web 的插件加载失败信号，见 .test 测试记录五）。 */
+/** 网页控制台失败模式（DSH web 的插件加载失败信号）。 */
 export const WEB_FAILURE_PATTERNS = [
   /Failed to load plugins/iu,
   /PLUGIN_LOAD_FAILURE_BANNER/u,
