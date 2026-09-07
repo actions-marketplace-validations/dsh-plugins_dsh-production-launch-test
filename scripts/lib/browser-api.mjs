@@ -3,8 +3,9 @@
  *
  * 所有函数经 page.exposeFunction 暴露为页面全局，用户脚本直接调用：
  *   await click('设置')
- *   await sendMessage('测试')
+ *   await selectWorkspace('D:\\work\\demo')   // 可省略：默认系统临时目录下的固定工作区
  *   await selectModel('sim-openai-completions/test-model')
+ *   await sendMessage('测试')
  *   await screenshot('settings')
  *   await waitFor('模拟回复')
  *   await sleep(500)
@@ -12,6 +13,7 @@
  */
 
 import { mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /**
@@ -139,6 +141,44 @@ export async function installBrowserApi(page, { screenshotsDir, log = () => {} }
     }, { provider, model })
     log(`selectModel("${spec}") → ${JSON.stringify(result?.value ?? result)}`)
     return true
+  })
+
+  await page.exposeFunction('selectWorkspace', async (dirPath) => {
+    // 默认目录：系统临时目录下的固定工作区（重复调用幂等——workspace/create 对已注册路径返回原工作区）
+    const wsPath = typeof dirPath === 'string' && dirPath !== ''
+      ? dirPath
+      : join(tmpdir(), 'dsh-plt-workspace')
+    await mkdir(wsPath, { recursive: true })
+    const result = await page.evaluate(async ({ path }) => {
+      async function rpc(endpoint, args) {
+        const response = await fetch(`/api/${endpoint}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'client-request',
+            rpcId: `dsh-plt-${endpoint}`,
+            method: endpoint,
+            payload: { args },
+          }),
+        })
+        if (!response.ok) throw new Error(`${endpoint} HTTP ${response.status}`)
+        const body = await response.json()
+        if (!body.result?.ok) {
+          throw new Error(`${endpoint} 失败：${body.result?.error?.code}: ${body.result?.error?.message}`)
+        }
+        return body.result.value
+      }
+      const { workspace, created } = await rpc('workspace/create', { request: { path } })
+      // 在工作区内建会话（session/create 的 workspaceId 绑定让会话出现在侧栏工作区下）
+      const session = await rpc('session/create', {
+        request: { workspaceId: workspace.workspaceId },
+      })
+      return { workspaceId: workspace.workspaceId, title: workspace.title, created, sessionId: session.sessionId }
+    }, { path: wsPath })
+    log(`selectWorkspace("${wsPath}") → ${result.title}（${result.created ? '新建' : '复用'}），会话 ${result.sessionId}`)
+    // 注意：不能在这里 reload——用户脚本整体跑在一次 page.evaluate 里，
+    // 导航会销毁执行上下文。侧栏经数据订阅实时更新，新会话可直接 click 进入。
+    return result
   })
 
   await page.exposeFunction('screenshot', async (name) => {

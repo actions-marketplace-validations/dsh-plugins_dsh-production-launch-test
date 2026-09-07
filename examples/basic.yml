@@ -42,9 +42,11 @@ jobs:
             @dsh-plugin/dsh-loader
           user-script: |
             try { await click('继续'); } catch {}
+            // 先建工作区并进入会话，再选模型、发消息；设置页放最后截图（无需关闭）
+            await selectWorkspace();
+            await click('新会话');
+            await selectModel('sim-openai-responses/test-model');
+            await sendMessage('测试');
+            await waitFor('工具结果已收到', 30000);
             await click('设置');
             await screenshot('settings');
-            await sendMessage('测试');
-            await sleep(8000);
-            await selectModel('sim-openai-responses/test-model');
-            await screenshot('done');

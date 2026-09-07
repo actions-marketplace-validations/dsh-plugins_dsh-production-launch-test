@@ -74,10 +74,14 @@ jobs:
             github:user/repo#commit=1234abc
             @dsh-plugin/dsh-loader
           user-script: |
+            try { await click('继续'); } catch {}
+            await selectWorkspace();
+            await click('新会话');
+            await selectModel('sim-openai-completions/test-model');
+            await sendMessage('测试');
+            await waitFor('工具结果已收到', 30000);
             await click('设置');
             await screenshot('settings');
-            await sendMessage('测试');
-            await waitFor('模拟回复', 30000);
 ```
 
 See [examples/basic.yml](examples/basic.yml) for a complete plugin-repo workflow.
@@ -171,6 +175,7 @@ Injected as page globals before your script runs (all async):
 | API | Behavior |
 | --- | --- |
 | `click(text, opts?)` | Clicks by role (`button`/`link`/`menuitem`/`tab`, exact then fuzzy) falling back to visible text. |
+| `selectWorkspace(path?)` | Registers/reuses a directory as a workspace via the `workspace/create` RPC, creates a session in it and reloads into it (also leaves sub-pages like settings); without `path` uses a fixed workspace under the system temp dir. |
 | `sendMessage(text)` | Focuses the chat composer, fills it and submits with Enter; falls back to the `session/prompt` RPC when no composer is visible (e.g. the workspace picker is still showing). |
 | `selectModel('provider/model')` | Calls the page's own `session.selectModel` RPC on the most recent session. |
 | `screenshot(name?)` | Saves `artifacts/screenshots/NN-<name>.png`; returns the path. |
