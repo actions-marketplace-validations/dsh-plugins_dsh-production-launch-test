@@ -6,7 +6,7 @@
  */
 
 import { chromium } from 'playwright-core'
-import { installBrowserApi } from './browser-api.mjs'
+import { ensureSession, installBrowserApi } from './browser-api.mjs'
 import { mapLocale } from './env.mjs'
 
 const HEADLESS = process.env.DSH_PLT_HEADLESS === '1'
@@ -84,6 +84,9 @@ export async function runInChrome({
     await page.screenshot({ path: `${screenshotsDir}/00-boot.png` }).catch(() => {})
 
     if (userScript.trim() !== '') {
+      // 全新 home 没有会话；在用户脚本开始前建好并刷新进入，
+      // 避免脚本执行期间的导航销毁 evaluate 上下文
+      await ensureSession(page, webUrl, log)
       log('执行用户脚本…')
       const timeoutMs = timeoutSeconds * 1000
       let timeout

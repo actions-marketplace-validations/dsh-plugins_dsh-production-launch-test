@@ -50,16 +50,53 @@ export async function installBrowserApi(page, { screenshotsDir, log = () => {} }
 
   await page.exposeFunction('sendMessage', async (text) => {
     if (typeof text !== 'string') throw new Error('sendMessage(text) 需要字符串')
-    const composer = page.locator('textarea:visible, [contenteditable="true"]:visible').last()
+    // 优先走 UI 输入框；GUI 停在欢迎页/无可见输入框时回退 session/prompt RPC
+    const composer = page.locator(
+      'textarea:visible, [contenteditable="true"]:visible, [role="textbox"]:visible').last()
     try {
-      await composer.click({ timeout: 5000 })
+      await composer.click({ timeout: 3000 })
       await composer.fill(text)
       await composer.press('Enter')
-    } catch (error) {
-      throw new Error(`sendMessage 失败：找不到聊天输入框（${error instanceof Error ? error.message : String(error)}）`)
+      log(`sendMessage(${JSON.stringify(text)}) 已提交（UI 输入框）`)
+      return true
+    } catch {
+      const result = await page.evaluate(async (promptText) => {
+        async function rpc(endpoint, args) {
+          const response = await fetch(`/api/${endpoint}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              type: 'client-request',
+              rpcId: `dsh-plt-${endpoint}`,
+              method: endpoint,
+              payload: { args },
+            }),
+          })
+          if (!response.ok) throw new Error(`${endpoint} HTTP ${response.status}`)
+          const body = await response.json()
+          if (!body.result?.ok) {
+            throw new Error(`${endpoint} 失败：${body.result?.error?.code}: ${body.result?.error?.message}`)
+          }
+          return body.result.value
+        }
+        const list = await rpc('session/list', { _request: {} })
+        let sessionId = list?.items?.[0]?.id
+        if (sessionId === undefined) {
+          sessionId = (await rpc('session/create', { request: {} })).sessionId
+        }
+        await rpc('session/prompt', {
+          request: {
+            requestId: `dsh-plt-${crypto.randomUUID()}`,
+            sessionId,
+            mode: 'queue',
+            content: [{ type: 'text', text: promptText }],
+          },
+        })
+        return sessionId
+      }, text)
+      log(`sendMessage(${JSON.stringify(text)}) 已提交（session/prompt RPC，会话 ${result}）`)
+      return true
     }
-    log(`sendMessage(${JSON.stringify(text)}) 已提交`)
-    return true
   })
 
   await page.exposeFunction('selectModel', async (spec) => {
@@ -88,14 +125,19 @@ export async function installBrowserApi(page, { screenshotsDir, log = () => {} }
         }
         return body.result.value
       }
-      const list = await rpc('session.list', {})
-      const sessionId = list?.items?.[0]?.id
+      const list = await rpc('session/list', { _request: {} })
+      let sessionId = list?.items?.[0]?.id
+      let created = false
       if (sessionId === undefined) {
-        throw new Error('当前没有可用会话，请先在脚本中新建会话再 selectModel')
+        // 全新 home 没有会话：经 RPC 建一个普通会话
+        const value = await rpc('session/create', { request: {} })
+        sessionId = value.sessionId
+        created = true
       }
-      return await rpc('session.selectModel', { sessionId, provider, model })
+      const value = await rpc('session/selectModel', { request: { sessionId, provider, model } })
+      return { value, created }
     }, { provider, model })
-    log(`selectModel("${spec}") → ${JSON.stringify(result)}`)
+    log(`selectModel("${spec}") → ${JSON.stringify(result?.value ?? result)}`)
     return true
   })
 
@@ -121,4 +163,50 @@ export async function installBrowserApi(page, { screenshotsDir, log = () => {} }
     new Promise(resolve => setTimeout(resolve, Number(ms))))
 
   await page.exposeFunction('currentUrl', () => page.url())
+}
+
+/**
+ * Node 侧 RPC：经页面 cookie 调 /api/<endpoint>（在用户脚本开始前使用，
+ * 避免在 page.evaluate 期间触发导航销毁执行上下文）。
+ * @param {import('playwright-core').Page} page
+ * @param {string} webUrl
+ */
+export async function nodeRpc(page, webUrl, endpoint, args) {
+  const origin = new URL(webUrl).origin
+  const cookies = await page.context().cookies(origin)
+  const response = await fetch(`${origin}/api/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      cookie: cookies.map(c => `${c.name}=${c.value}`).join('; '),
+    },
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId: `dsh-plt-node-${endpoint}`,
+      method: endpoint,
+      payload: { args },
+    }),
+  })
+  if (!response.ok) throw new Error(`${endpoint} HTTP ${response.status}`)
+  const body = await response.json()
+  if (!body.result?.ok) {
+    throw new Error(`${endpoint} 失败：${body.result?.error?.code}: ${body.result?.error?.message}`)
+  }
+  return body.result.value
+}
+
+/**
+ * 确保 GUI 至少有一个会话：没有则创建并刷新页面进入它。
+ * @param {import('playwright-core').Page} page
+ * @param {string} webUrl
+ * @param {(line: string) => void} [log]
+ */
+export async function ensureSession(page, webUrl, log = () => {}) {
+  const list = await nodeRpc(page, webUrl, 'session/list', { _request: {} })
+  if (list?.items?.[0]?.id !== undefined) return
+  const created = await nodeRpc(page, webUrl, 'session/create', { request: {} })
+  log(`新建会话：${created.sessionId}，刷新页面进入`)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+  await page.waitForTimeout(1000)
 }
