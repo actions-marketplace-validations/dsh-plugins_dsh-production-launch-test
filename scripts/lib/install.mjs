@@ -44,9 +44,22 @@ async function writeText(path, content) {
 
 /**
  * 隔离安装 @deepseek-ai/dsh@<version>，返回 bin.js 路径。
- * @param {{ version: string, rootDir: string, log: (line: string) => void }} options
+ * npm 上没有该版本时（如只在 GitHub Releases 存在的 0.1.2-alpha.1 / 0.1.3-alpha.1）
+ * 自动改为从源码构建安装（clone dsh-v<version> → build:official → release:pack）。
+ * @param {{ version: string, rootDir: string, token?: string, log: (line: string) => void }} options
  */
-export async function installDsh({ version, rootDir, log }) {
+export async function installDsh({ version, rootDir, token = '', log }) {
+  // 源码构建过的版本落在 versions/src-<ver>，先查复用
+  const srcBin = join(rootDir, 'versions', `src-${version}`, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  if (existsSync(srcBin)) {
+    log(`dsh@${version}（源码构建）已安装，复用`)
+    return srcBin
+  }
+  if (!await npmHasVersion(version)) {
+    log(`npm 上不存在 @deepseek-ai/dsh@${version}，自动从源码构建（GitHub Releases 独占版本）…`)
+    const { installDshFromSource } = await import('./dsh-source.mjs')
+    return await installDshFromSource({ version, rootDir, token, log })
+  }
   const versionDir = join(rootDir, 'versions', version)
   const storeDir = join(rootDir, '.pnpm-store')
   const bin = join(versionDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
@@ -76,6 +89,18 @@ export async function installDsh({ version, rootDir, log }) {
     throw new Error(`安装完成但未找到 ${bin}，请确认 npm 上存在 @deepseek-ai/dsh@${version}`)
   }
   return bin
+}
+
+/** 探测 npm 上是否存在该版本（网络异常时按存在处理，交给 pnpm 报错）。 */
+async function npmHasVersion(version) {
+  try {
+    const response = await fetch(`https://registry.npmjs.org/@deepseek-ai/dsh/${version}`, {
+      headers: { accept: 'application/vnd.npm.install-v1+json' },
+    })
+    return response.ok
+  } catch {
+    return true
+  }
 }
 
 /**

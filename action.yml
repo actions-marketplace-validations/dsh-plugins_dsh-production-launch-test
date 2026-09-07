@@ -14,18 +14,10 @@ branding:
 inputs:
   dsh-version:
     description: >-
-      要安装并启动的 @deepseek-ai/dsh npm 版本（例如 0.1.3-alpha.1）。
-      版本不存在于 npm 时 action 失败；仅在 GitHub Releases 存在的版本请同时提供
-      dsh-source（此时 dsh-version 仅作版本标签）。
+      要安装并启动的 @deepseek-ai/dsh 版本（例如 0.1.3-alpha.1）。
+      npm 上不存在该版本时（只在 GitHub Releases 存在的版本，如 0.1.2-alpha.1），
+      action 自动克隆 deepseek-ai/deepseek-harness 对应 tag 从源码构建安装。
     required: true
-  dsh-source:
-    description: >-
-      可选的源码构建通道，覆盖 npm 上不存在的版本：
-      artifact:<name>（当前 run 中含 dist/npm tgz 集合的 artifact）或
-      github:<owner>/<repo>@<ref>（现场克隆 + pnpm build + release:pack，较慢）。
-      为空时按 dsh-version 从 npm 安装。
-    required: false
-    default: ''
   lang:
     description: >-
       Web GUI 界面语言（BCP 47，例如 zh-CN / en-US）。映射到 DSH 的
@@ -94,7 +86,6 @@ runs:
       shell: bash
       env:
         INPUT_DSH_VERSION: ${{ inputs.dsh-version }}
-        INPUT_DSH_SOURCE: ${{ inputs.dsh-source }}
         INPUT_LANG: ${{ inputs.lang }}
         INPUT_SIMULATED_LLM: ${{ inputs.simulated-llm }}
         INPUT_PLUGINS: ${{ inputs.plugins }}

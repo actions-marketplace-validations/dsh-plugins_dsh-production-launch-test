@@ -35,7 +35,7 @@ Given a DSH version, this action:
 | Node | `^22.19.0 \|\| >=24` (DSH engines). Run `actions/setup-node@v4` before this action. |
 | Chrome | System Chrome, used via playwright-core `channel: 'chrome'`. Preinstalled on all GitHub-hosted desktop runners. |
 | pnpm | The action self-provisions pnpm 11.17 when missing (corepack first, falling back to `npm i -g`). |
-| Permissions | Workflows using `artifact:` plugin specs or `dsh-source: artifact:` must grant `actions: read` (artifacts are downloaded through the REST API). |
+| Permissions | Workflows using `artifact:` plugin specs must grant `actions: read` (artifacts are downloaded through the REST API). |
 
 Logs and screenshots are uploaded by a nested `actions/upload-artifact` step inside the
 action (composite `run` steps never receive `ACTIONS_RUNTIME_TOKEN`, so in-process upload
@@ -87,8 +87,8 @@ See [examples/basic.yml](examples/basic.yml) for a complete plugin-repo workflow
 (manually triggered, also serves as a copy-paste example) resolves **at every run**:
 
 - every DSH version ≥ `0.1.0-rc.6` from npm ∪ GitHub Releases (`dsh-v*` tags) — versions
-  that exist only on GitHub are built from source once per version by a `build-source`
-  job and handed to the test cells as `artifact:dsh-src-<version>`;
+  that exist only on GitHub (e.g. `0.1.2-alpha.1`, `0.1.3-alpha.1`) are built from source
+  automatically by the action itself;
 - the newest of each plugin's `latest`/`next` npm dist-tags for the seven workspace
   plugins (`dsh-thought-buddy`, `dsh-approve-for-me`, `dsh-auxiliary`,
   `dsh-better-sidebar-loader`, `dsh-code-review`, `dsh-loader`, `dsh-network-settings`),
@@ -101,8 +101,7 @@ then runs the matrix `windows / macos / ubuntu × <every dsh version>` with
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `dsh-version` | ✅ | — | `@deepseek-ai/dsh` npm version to install and boot (e.g. `0.1.3-alpha.1`). When `dsh-source` is set, this only serves as the version label. |
-| `dsh-source` | | — | Source-build channel for versions missing from npm (GitHub-Releases-only): `artifact:<name>` (an artifact of the current run holding the `dist/npm` tgz set) or `github:<owner>/<repo>@<ref>` (clone + `pnpm build` + `release:pack` in place, slow). Empty = install `dsh-version` from npm. |
+| `dsh-version` | ✅ | — | `@deepseek-ai/dsh` version to install and boot (e.g. `0.1.3-alpha.1`). When the version is missing from npm (GitHub-Releases-only, e.g. `0.1.2-alpha.1`), the action automatically clones `deepseek-ai/deepseek-harness` at tag `dsh-v<version>` and builds from source (`pnpm install` → `build:official` → `release:pack --family dsh`). |
 | `lang` | | `zh-CN` | Web GUI language (BCP 47). Mapped to DSH `locale.preference` (`zh`/`en`) and to Chrome's `navigator.languages`. |
 | `simulated-llm` | | `false` | Space-separated protocols: `openai-completions` / `openai-responses` / `anthropic-messages` / `all` / `false`. `true` is an alias of `all`. |
 | `plugins` | | — | One plugin spec per line (grammar below). |
@@ -127,14 +126,18 @@ github:user/repo#path/to/plugin@release-tag           # subdirectory + tag
 github:user/repo#path/to/plugin.tgz                   # a .tgz file inside the repo
 github:user/repo#path/to/plugin.tgz&commit=1234abc
 github:user/repo#path/to/plugin.tgz@release-tag
+path/to/plugin                                        # local directory (with package.json), auto pnpm pack
+path/to/plugin.tgz                                    # local prepacked tgz, used as-is
+path:path/to/plugin                                   # explicit path: prefix (both forms equivalent)
 @npm-scope/plugin@version                             # npm source, passed through
 ```
 
-Specs carrying a ref or a path are materialized by `git clone` + checkout + `pnpm pack`
-(or a direct `raw.githubusercontent.com` download for in-repo `.tgz` files) into a local
-tarball, which is then handed to `dsh plugin --profile <profile> add`. Bare `github:` and
-npm specs are passed through untouched. After installation the action verifies that every
-plugin was registered in `dsh.profile.bundles`; any install failure fails the action.
+Local paths resolve against the caller workspace. Specs carrying a ref or a subpath are
+materialized by `git clone` + checkout + `pnpm pack` (or a direct
+`raw.githubusercontent.com` download for in-repo `.tgz` files) into a local tarball, which
+is then handed to `dsh plugin --profile <profile> add`. Bare `github:` and npm specs are
+passed through untouched. After installation the action verifies that every plugin was
+registered in `dsh.profile.bundles`; any install failure fails the action.
 
 ## Simulated LLM
 

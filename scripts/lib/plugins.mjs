@@ -28,7 +28,8 @@ import { binOf, run } from './proc.mjs'
 /** @typedef {{ kind: 'github', owner: string, repo: string, path?: string,
  *   commit?: string, tag?: string, raw: string }} GithubSpec */
 /** @typedef {{ kind: 'npm', name: string, packageName: string, raw: string }} NpmSpec */
-/** @typedef {ArtifactSpec | GithubSpec | NpmSpec} PluginSpec */
+/** @typedef {{ kind: 'path', path: string, raw: string }} PathSpec */
+/** @typedef {ArtifactSpec | GithubSpec | NpmSpec | PathSpec} PluginSpec */
 
 /**
  * 解析 plugins 多行输入为规格数组。
@@ -59,11 +60,27 @@ export function parsePluginSpec(line) {
   if (line.startsWith('github:')) {
     return parseGithubSpec(line)
   }
+  // 本地路径：显式 path: 前缀，或形态上只能是路径（.tgz / 相对 / 绝对 / 非 scoped 的 /）
+  const bare = line.startsWith('path:') ? line.slice('path:'.length).trim() : line
+  if (line.startsWith('path:') || isPathLike(bare)) {
+    if (bare === '') throw new Error(`插件规格非法：${line}（path: 后缺少路径）`)
+    return { kind: 'path', path: bare, raw: line }
+  }
   // npm 规格：@scope/name[@version] 或 bare[@version]
   if (/^(?:@[\w.-]+\/)?[\w.-]+(?:@[\w.:*~^>= -]+)?$/u.test(line)) {
     return { kind: 'npm', name: line, packageName: npmPackageName(line), raw: line }
   }
   throw new Error(`无法识别的插件规格：${line}`)
+}
+
+/** 形态判断：.tgz 文件、./ ../ ~/ 前缀、含反斜杠、或非 scoped 的 / 分隔。 */
+function isPathLike(text) {
+  if (text.includes('://')) return false // URL 一律拒绝
+  return /\.tgz$/u.test(text)
+    || /^(?:\.{1,2}|~)[/\\]/u.test(text)
+    || text.includes('\\')
+    || (text.includes('/') && !text.startsWith('@'))
+    || /^[A-Za-z]:/u.test(text)
 }
 
 /** npm 规格 → 纯包名（剥离 @version；scoped 名的前导 @ 保留）。 */
@@ -130,6 +147,8 @@ export async function materializePlugin(spec, options) {
   switch (spec.kind) {
     case 'npm':
       return { target: spec.name, display: spec.name, packageName: spec.packageName }
+    case 'path':
+      return materializePath(spec, options)
     case 'github':
       return materializeGithub(spec, options)
     case 'artifact':
@@ -137,6 +156,23 @@ export async function materializePlugin(spec, options) {
     default:
       throw new Error(`未知插件规格类型：${JSON.stringify(spec)}`)
   }
+}
+
+/**
+ * 物化本地路径规格：path/to/plugin.tgz 直接引用；path/to/plugin 目录打包。
+ * 相对路径基于 action 运行时的 cwd（调用方 workspace）。
+ */
+async function materializePath(spec, { workDir, log = () => {} }) {
+  const abs = resolve(spec.path)
+  if (spec.path.endsWith('.tgz')) {
+    if (!existsSync(abs)) throw new Error(`path 插件 tgz 不存在：${abs}`)
+    return { target: abs, display: spec.path }
+  }
+  if (!existsSync(join(abs, 'package.json'))) {
+    throw new Error(`path 插件目录非法：${abs}（缺少 package.json）`)
+  }
+  const { target, packageName } = await packDirectory(abs, workDir, log)
+  return { target, display: spec.path, packageName }
 }
 
 async function materializeGithub(spec, { workDir, token, log = () => {} }) {

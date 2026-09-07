@@ -12,7 +12,6 @@ import { mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { detectDesktop, mapLocale, nodeVersionOk, readInputs } from './lib/env.mjs'
-import { installDshFromSource } from './lib/dsh-source.mjs'
 import { installDsh, mergeSettingsYaml, prepareProfile, spawnDsh } from './lib/install.mjs'
 import { createLogger, scanLogs } from './lib/logs.mjs'
 import { materializePlugin, parsePluginsInput, readBundles } from './lib/plugins.mjs'
@@ -82,15 +81,12 @@ async function main() {
 
     // ---------- 安装 DSH ----------
     log('=== 安装 DSH ===')
-    const bin = inputs.dshSource !== ''
-      ? await installDshFromSource({
-          source: inputs.dshSource,
-          version: inputs.dshVersion,
-          rootDir: workRoot,
-          token: inputs.githubToken,
-          log,
-        })
-      : await installDsh({ version: inputs.dshVersion, rootDir: workRoot, log })
+    const bin = await installDsh({
+      version: inputs.dshVersion,
+      rootDir: workRoot,
+      token: inputs.githubToken,
+      log,
+    })
 
     // ---------- 准备 profile ----------
     log('=== 准备测试 profile ===')

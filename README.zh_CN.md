@@ -33,7 +33,7 @@
 | Node | `^22.19.0 \|\| >=24`（DSH engines）。请先运行 `actions/setup-node@v4`。 |
 | Chrome | 系统 Chrome，经 playwright-core `channel: 'chrome'` 调用。GitHub 托管的桌面 runner 均已预装。 |
 | pnpm | 缺失时由 action 自备 pnpm 11.17（corepack 优先，退回 `npm i -g`）。 |
-| 权限 | 用到 `artifact:` 插件规格或 `dsh-source: artifact:` 时，工作流需授予 `actions: read`（artifact 经 REST API 下载）。 |
+| 权限 | 用到 `artifact:` 插件规格时，工作流需授予 `actions: read`（artifact 经 REST API 下载）。 |
 
 日志与截图由 action 内嵌的 `actions/upload-artifact` 步骤上传
 （composite 的 run 步骤拿不到 `ACTIONS_RUNTIME_TOKEN`，不能进程内上传），
@@ -85,8 +85,8 @@ jobs:
 （手动触发，也可直接复制为调用方示例）**每次触发都重新解析**：
 
 - dsh 版本清单：npm `@deepseek-ai/dsh` 全部版本 ∪ GitHub Releases（`dsh-v*` tag），
-  取 ≥ `0.1.0-rc.6`；npm 上缺失的版本由 `build-source` job 从源码构建一次
-  （clone + `pnpm build` + `release:pack`），以 `artifact:dsh-src-<版本>` 供全部 OS 复用；
+  取 ≥ `0.1.0-rc.6`；npm 上缺失的版本（如 `0.1.2-alpha.1` / `0.1.3-alpha.1`）由 action
+  自动从源码构建安装；
 - 7 个工作区插件（`dsh-thought-buddy`、`dsh-approve-for-me`、`dsh-auxiliary`、
   `dsh-better-sidebar-loader`、`dsh-code-review`、`dsh-loader`、`dsh-network-settings`）
   的 npm dist-tags 在 `latest` 与 `next` 中取较新者，全部装进同一个测试 profile；
@@ -98,8 +98,7 @@ jobs:
 
 | 输入 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `dsh-version` | ✅ | — | 要安装并启动的 `@deepseek-ai/dsh` npm 版本（如 `0.1.3-alpha.1`）。设置了 `dsh-source` 时仅作版本标签。 |
-| `dsh-source` | | — | npm 上缺失版本（GitHub Releases 独占）的源码构建通道：`artifact:<name>`（当前 run 中含 `dist/npm` tgz 集合的 artifact）或 `github:<owner>/<repo>@<ref>`（现场克隆 + `pnpm build` + `release:pack`，较慢）。为空时按 `dsh-version` 从 npm 安装。 |
+| `dsh-version` | ✅ | — | 要安装并启动的 `@deepseek-ai/dsh` 版本（如 `0.1.3-alpha.1`）。npm 上不存在该版本时（GitHub Releases 独占，如 `0.1.2-alpha.1`），action 自动克隆 `deepseek-ai/deepseek-harness` 的 `dsh-v<版本>` tag 从源码构建安装（`pnpm install` → `build:official` → `release:pack --family dsh`）。 |
 | `lang` | | `zh-CN` | Web GUI 界面语言（BCP 47）。映射到 DSH `locale.preference`（`zh`/`en`），并同步 Chrome 的 `navigator.languages`。 |
 | `simulated-llm` | | `false` | 空格分隔的协议列表：`openai-completions` / `openai-responses` / `anthropic-messages` / `all` / `false`。`true` 等价于 `all`。 |
 | `plugins` | | — | 每行一个插件规格（语法见下）。 |
@@ -124,13 +123,17 @@ github:user/repo#path/to/plugin@release-tag           # 子目录 + tag
 github:user/repo#path/to/plugin.tgz                   # 仓库内的 .tgz 产物文件
 github:user/repo#path/to/plugin.tgz&commit=1234abc
 github:user/repo#path/to/plugin.tgz@release-tag
+path/to/plugin                                        # 本地目录（含 package.json），自动 pnpm pack
+path/to/plugin.tgz                                    # 本地已打包的 tgz，直接引用
+path:path/to/plugin                                   # 显式 path: 前缀（两种形态同义）
 @npm-scope/plugin@version                             # npm 源，直接透传
 ```
 
-带 ref 或 path 的规格统一经 `git clone` + checkout + `pnpm pack`（仓库内 `.tgz`
-文件走 `raw.githubusercontent.com` 直接下载）物化为本地 tarball，再交给
-`dsh plugin --profile <profile> add`；裸 `github:` 与 npm 规格原样透传。安装完成后
-action 会校验每个插件都已注册进 `dsh.profile.bundles`；任何安装失败都会让 action 失败。
+本地路径相对调用方 workspace 解析；带 ref 或子路径的 github 规格统一经
+`git clone` + checkout + `pnpm pack`（仓库内 `.tgz` 文件走 `raw.githubusercontent.com`
+直接下载）物化为本地 tarball，再交给 `dsh plugin --profile <profile> add`；
+裸 `github:` 与 npm 规格原样透传。安装完成后 action 会校验每个插件都已注册进
+`dsh.profile.bundles`；任何安装失败都会让 action 失败。
 
 ## 模拟 LLM
 

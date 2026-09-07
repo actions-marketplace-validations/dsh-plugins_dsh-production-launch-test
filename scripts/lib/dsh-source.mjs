@@ -1,23 +1,21 @@
 /**
- * dsh-source — 从源码构建产物安装 DSH（覆盖只在 GitHub Releases 存在、
- * npm 上没有的版本，如 0.1.2-alpha.1 / 0.1.3-alpha.1）。
+ * dsh-source — npm 上不存在的 dsh 版本自动走源码构建安装。
  *
- * 与 .test 对 0.1.2-alpha.1 的做法一致：
- *   源码树 pnpm install + build + release:pack → dist/npm/deepseek-ai-*.tgz，
- *   再把全部 tgz 以 file: 依赖写进版本目录的 package.json，pnpm install 出
- *   node_modules/@deepseek-ai/dsh/lib/bin.js。
- *
- * dsh-source 输入形态：
- *   artifact:<name>                当前 run 中含 dist/npm tgz 集合的 artifact
- *   github:<owner>/<repo>@<ref>    现场克隆源码树并构建打包（慢，供本地/临时使用）
- *   dir:<path>                     直接指向含 tgz 集合的本地目录（本地调试）
+ * 流程与 .test 对 0.1.2-alpha.1 的做法一致：
+ *   clone deepseek-ai/deepseek-harness@dsh-v<version>
+ *   → pnpm install + build:official + release:pack --family dsh
+ *   → dist/npm/deepseek-ai-*.tgz 全部以 file: 依赖 + overrides 钉进版本目录
+ *   → pnpm install 出 node_modules/@deepseek-ai/dsh/lib/bin.js
  */
 
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
-import { downloadArtifactByName } from './artifact-store.mjs'
 import { binOf, run } from './proc.mjs'
+
+/** DSH 官方仓库与 release tag 前缀。 */
+export const DSH_REPO = 'deepseek-ai/deepseek-harness'
+export const DSH_TAG_PREFIX = 'dsh-v'
 
 /** dist tgz 文件名 → 包名（deepseek-ai-dsh-web-0.1.2-alpha.1.tgz → @deepseek-ai/dsh-web）。 */
 export function tgzToPackageName(filename) {
@@ -27,29 +25,18 @@ export function tgzToPackageName(filename) {
 }
 
 /**
- * 从源码产物安装 DSH，返回 bin.js 路径。
- * @param {{ source: string, version: string, rootDir: string, token?: string,
+ * 从源码构建并安装 DSH，返回 bin.js 路径。
+ * @param {{ version: string, rootDir: string, token?: string,
  *   log: (line: string) => void }} options
  */
-export async function installDshFromSource({ source, version, rootDir, token = '', log }) {
+export async function installDshFromSource({ version, rootDir, token = '', log }) {
   const versionDir = join(rootDir, 'versions', `src-${version}`)
   const bin = join(versionDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   if (existsSync(bin)) {
     log(`dsh@${version}（源码构建）已安装，复用 ${versionDir}`)
     return bin
   }
-
-  let distDir
-  if (source.startsWith('artifact:')) {
-    distDir = await downloadDistArtifact(source.slice('artifact:'.length), rootDir, token, log)
-  } else if (source.startsWith('github:')) {
-    distDir = await buildDistFromGithub(source.slice('github:'.length), rootDir, token, log)
-  } else if (source.startsWith('dir:')) {
-    distDir = resolve(source.slice('dir:'.length))
-    log(`使用本地产物目录：${distDir}`)
-  } else {
-    throw new Error(`dsh-source 非法：${source}（支持 artifact:<name>、github:<owner>/<repo>@<ref>、dir:<path>）`)
-  }
+  const distDir = await buildDistFromGithub(`${DSH_REPO}@${DSH_TAG_PREFIX}${version}`, rootDir, token, log)
 
   const tgzs = (await readdir(distDir)).filter(name => name.endsWith('.tgz'))
   if (tgzs.length === 0) throw new Error(`${distDir} 下没有 *.tgz 产物`)
@@ -80,38 +67,18 @@ export async function installDshFromSource({ source, version, rootDir, token = '
   return bin
 }
 
-/** 下载含 dist/npm tgz 集合的 artifact，返回 tgz 所在目录。 */
-async function downloadDistArtifact(name, rootDir, token, log) {
-  const dest = join(rootDir, 'materialized', `dsh-src-${name}`)
-  await mkdir(dest, { recursive: true })
-  await downloadArtifactByName({ name, destDir: dest, token, log })
-  // 产物可能直接是 tgz 平铺，也可能嵌一层目录
-  const tgzDir = await findTgzDir(dest)
-  if (tgzDir === null) throw new Error(`artifact ${name} 内容中找不到 *.tgz：${dest}`)
-  return tgzDir
-}
-
-async function findTgzDir(dir) {
-  const entries = await readdir(dir, { withFileTypes: true })
-  if (entries.some(e => e.isFile() && e.name.endsWith('.tgz'))) return dir
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const nested = await findTgzDir(join(dir, entry.name))
-      if (nested !== null) return nested
-    }
-  }
-  return null
-}
-
 /**
- * 现场克隆源码树并构建打包。
- * 流程：clone → corepack pnpm install → pnpm build → pnpm release:pack → dist/npm。
+ * 克隆源码树并构建打包：clone → pnpm install → build:official → release:pack --family dsh。
+ * @param {string} spec - <owner>/<repo>@<ref>
+ * @param {string} rootDir
+ * @param {string} token
+ * @param {(line: string) => void} log
  * @returns {Promise<string>} dist/npm 目录
  */
 export async function buildDistFromGithub(spec, rootDir, token, log) {
   const match = /^(?<repo>[\w.-]+\/[\w.-]+)@(?<ref>[^@\s]+)$/u.exec(spec)
   if (match?.groups === undefined) {
-    throw new Error(`dsh-source 的 github 形态应为 github:<owner>/<repo>@<ref>：${spec}`)
+    throw new Error(`源码构建规格应为 <owner>/<repo>@<ref>：${spec}`)
   }
   const { repo, ref } = match.groups
   const srcDir = join(rootDir, 'source', `${repo.replace('/', '-')}-${ref}`)

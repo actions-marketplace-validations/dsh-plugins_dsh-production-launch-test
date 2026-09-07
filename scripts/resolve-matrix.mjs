@@ -2,9 +2,10 @@
  * resolve-matrix — 动态解析全量版本矩阵（workflow_dispatch 每次触发都重新拉取）。
  *
  * 输出（写 GITHUB_OUTPUT）：
- *   matrix        JSON：{ os: [...], dsh: [{ version, source }] }
- *   source-matrix JSON：{ version: [...] }（仅源码构建版本，无则空数组）
+ *   matrix        JSON：{ os: [...], dsh: [<version>...] }
  *   plugins       多行插件规格（latest 与 next 取较新者）
+ *
+ * npm 上缺失的版本（GitHub Releases 独占）无需特判：action 会自动源码构建。
  *
  * 用法：node scripts/resolve-matrix.mjs
  * 环境变量：GITHUB_TOKEN / GH_TOKEN（GitHub Releases API 鉴权，可选但建议）
@@ -47,9 +48,8 @@ async function main() {
     { accept: 'application/vnd.npm.install-v1+json' })
   const npmVersions = Object.keys(npmDoc.versions ?? {})
   const releaseTags = await fetchAllReleases(token)
-  const dshEntries = mergeDshVersions(npmVersions, releaseTags, MIN_DSH_VERSION)
-  console.log(`dsh 版本（≥${MIN_DSH_VERSION}，含 GitHub 独占）：${dshEntries.map(e => e.version).join(', ')}`)
-  console.log(`源码构建版本：${dshEntries.filter(e => e.source !== '').map(e => e.version).join(', ') || '(无)'}`)
+  const dshVersions = mergeDshVersions(npmVersions, releaseTags, MIN_DSH_VERSION)
+  console.log(`dsh 版本（≥${MIN_DSH_VERSION}，含 GitHub 独占）：${dshVersions.join(', ')}`)
 
   const pluginSpecs = []
   for (const name of SWEEP_PLUGINS) {
@@ -60,12 +60,8 @@ async function main() {
     console.log(`插件 ${name}：latest=${doc['dist-tags']?.latest} next=${doc['dist-tags']?.next} → ${version}`)
   }
 
-  const matrix = buildMatrix(dshEntries)
-  const sourceMatrix = { version: dshEntries.filter(e => e.source !== '').map(e => e.version) }
   const outputs = {
-    matrix: JSON.stringify(matrix),
-    'source-matrix': JSON.stringify(sourceMatrix),
-    'has-source': sourceMatrix.version.length > 0 ? 'true' : 'false',
+    matrix: JSON.stringify(buildMatrix(dshVersions)),
     plugins: pluginSpecs.join('\n'),
   }
   const outFile = process.env.GITHUB_OUTPUT

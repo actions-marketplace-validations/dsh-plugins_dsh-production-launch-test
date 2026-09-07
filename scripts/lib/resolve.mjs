@@ -20,27 +20,21 @@ export const SWEEP_PLUGINS = [
 ]
 
 /**
- * 合并 npm 版本与 GitHub Releases 版本，过滤 ≥ minVersion 并升序。
- * npm 上存在的版本 source 为空串（走 dsh-version 安装）；
- * 仅 GitHub 存在的版本 source 为 artifact 名（由 build-source job 先行构建上传）。
+ * 合并 npm 版本与 GitHub Releases 版本，过滤 ≥ minVersion 并升序返回。
+ * npm 缺失的版本由 action 在 dsh-version 解析时自动从源码构建，无需在此区分。
  * @param {string[]} npmVersions
  * @param {string[]} releaseTags - 形如 dsh-v0.1.3-alpha.1
  * @param {string} minVersion
- * @returns {{ version: string, source: string }[]}
+ * @returns {string[]}
  */
 export function mergeDshVersions(npmVersions, releaseTags, minVersion) {
-  const npmSet = new Set(npmVersions.filter(v => parseSemver(v) !== null))
-  const all = new Set(npmSet)
+  const all = new Set(npmVersions.filter(v => parseSemver(v) !== null))
   for (const tag of releaseTags) {
     if (!tag.startsWith(DSH_TAG_PREFIX)) continue
     const version = tag.slice(DSH_TAG_PREFIX.length)
     if (parseSemver(version) !== null) all.add(version)
   }
-  const sorted = sortSemver([...all].filter(v => compareSemver(v, minVersion) >= 0))
-  return sorted.map(version => ({
-    version,
-    source: npmSet.has(version) ? '' : `artifact:dsh-src-${version}`,
-  }))
+  return sortSemver([...all].filter(v => compareSemver(v, minVersion) >= 0))
 }
 
 /**
@@ -59,9 +53,9 @@ export function pickPluginVersion(distTags) {
 }
 
 /** 生成 GitHub Actions matrix 对象。 */
-export function buildMatrix(dshEntries) {
+export function buildMatrix(dshVersions) {
   return {
     os: ['windows-latest', 'macos-latest', 'ubuntu-latest'],
-    dsh: dshEntries,
+    dsh: dshVersions,
   }
 }
