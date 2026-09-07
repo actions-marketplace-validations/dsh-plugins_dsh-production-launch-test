@@ -75,6 +75,32 @@ export function binOf(name) {
 }
 
 /**
+ * 保证 pnpm 11.17 可用：已有则直接用；否则 corepack（enable + prepare），
+ * corepack 不可用（shim 缺失 / node>=25 移除）时退回 npm 全局安装。
+ * @param {(line: string) => void} log
+ */
+export async function ensurePnpm(log) {
+  const probe = await run(binOf('pnpm'), ['--version'], { log, allowFailure: true })
+  if (probe.code === 0) {
+    log(`pnpm ${probe.stdout.trim()} 就绪`)
+    return
+  }
+  log('pnpm 不可用，尝试 corepack 准备 pnpm@11.17.0…')
+  const enable = await run(binOf('corepack'), ['enable'], { log, allowFailure: true })
+  const prepare = enable.code === 0
+    ? await run(binOf('corepack'), ['prepare', 'pnpm@11.17.0', '--activate'], { log, allowFailure: true })
+    : { code: -1 }
+  const verify = prepare.code === 0
+    ? await run(binOf('pnpm'), ['--version'], { log, allowFailure: true })
+    : { code: -1 }
+  if (verify.code !== 0) {
+    log('corepack 路径不可用，经 npm 全局安装 pnpm@11.17.0…')
+    await run(binOf('npm'), ['install', '-g', 'pnpm@11.17.0'], { log })
+    await run(binOf('pnpm'), ['--version'], { log })
+  }
+}
+
+/**
  * 终止整个进程树（dsh 会派生子进程）。
  * Windows 用 taskkill /T；POSIX 上要求 spawn 时 detached:true，按进程组发信号。
  * @param {import('node:child_process').ChildProcess} child

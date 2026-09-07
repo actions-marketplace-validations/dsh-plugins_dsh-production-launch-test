@@ -10,6 +10,7 @@ import { cp, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { buildDistFromGithub } from './lib/dsh-source.mjs'
+import { ensurePnpm } from './lib/proc.mjs'
 
 async function main() {
   const [spec, outDir] = process.argv.slice(2)
@@ -19,6 +20,7 @@ async function main() {
   const rootDir = join(tmpdir(), 'dsh-plt-source-build')
   await mkdir(rootDir, { recursive: true })
   const token = (process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '').trim()
+  await ensurePnpm(line => console.log(line))
   const distDir = await buildDistFromGithub(spec.slice('github:'.length), rootDir, token,
     line => console.log(line))
   await mkdir(outDir, { recursive: true })

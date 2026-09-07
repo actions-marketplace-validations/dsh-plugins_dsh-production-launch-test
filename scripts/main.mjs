@@ -16,7 +16,7 @@ import { installDshFromSource } from './lib/dsh-source.mjs'
 import { installDsh, mergeSettingsYaml, prepareProfile, spawnDsh } from './lib/install.mjs'
 import { createLogger, scanLogs } from './lib/logs.mjs'
 import { materializePlugin, parsePluginsInput, readBundles } from './lib/plugins.mjs'
-import { binOf, run } from './lib/proc.mjs'
+import { ensurePnpm, run } from './lib/proc.mjs'
 import { preflightChrome, runInChrome } from './lib/runner.mjs'
 import {
   providerSettings,
@@ -38,28 +38,6 @@ async function resolveUserScript(source, token, log) {
   })
   if (!response.ok) throw new Error(`拉取用户脚本失败：HTTP ${response.status} ${url}`)
   return await response.text()
-}
-
-async function ensurePnpm(log) {
-  const probe = await run(binOf('pnpm'), ['--version'], { log, allowFailure: true })
-  if (probe.code === 0) {
-    log(`pnpm ${probe.stdout.trim()} 就绪`)
-    return
-  }
-  log('pnpm 不可用，尝试 corepack 准备 pnpm@11.17.0…')
-  // corepack 本身可能缺 shim（windows 的 corepack.cmd / node>=25 移除），失败则退回 npm 全局安装
-  const enable = await run(binOf('corepack'), ['enable'], { log, allowFailure: true })
-  const prepare = enable.code === 0
-    ? await run(binOf('corepack'), ['prepare', 'pnpm@11.17.0', '--activate'], { log, allowFailure: true })
-    : { code: -1 }
-  const verify = prepare.code === 0
-    ? await run(binOf('pnpm'), ['--version'], { log, allowFailure: true })
-    : { code: -1 }
-  if (verify.code !== 0) {
-    log('corepack 路径不可用，经 npm 全局安装 pnpm@11.17.0…')
-    await run(binOf('npm'), ['install', '-g', 'pnpm@11.17.0'], { log })
-    await run(binOf('pnpm'), ['--version'], { log })
-  }
 }
 
 async function main() {
