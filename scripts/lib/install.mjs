@@ -94,9 +94,8 @@ export async function installDsh({ version, rootDir, token = '', log }) {
 /** 探测 npm 上是否存在该版本（网络异常时按存在处理，交给 pnpm 报错）。 */
 async function npmHasVersion(version) {
   try {
-    const response = await fetch(`https://registry.npmjs.org/@deepseek-ai/dsh/${version}`, {
-      headers: { accept: 'application/vnd.npm.install-v1+json' },
-    })
+    // 注意：per-version 端点不支持 application/vnd.npm.install-v1+json（会 406），勿加该头
+    const response = await fetch(`https://registry.npmjs.org/@deepseek-ai/dsh/${version}`)
     return response.ok
   } catch {
     return true

@@ -8,8 +8,8 @@
  *   → pnpm install 出 node_modules/@deepseek-ai/dsh/lib/bin.js
  */
 
-import { existsSync } from 'node:fs'
-import { mkdir, readdir, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 import { binOf, run } from './proc.mjs'
 
@@ -90,9 +90,29 @@ export async function buildDistFromGithub(spec, rootDir, token, log) {
   if (!existsSync(srcDir)) {
     const auth = token !== '' ? `x-access-token:${token}@` : ''
     log(`克隆 https://github.com/${repo} @ ${ref}…`)
-    await run('git', ['clone', '--depth', '1', '--branch', ref,
-      `https://${auth}github.com/${repo}.git`, srcDir], { log, redact: [token] })
+    const lsRemote = await run('git', ['ls-remote', '--tags',
+      `https://${auth}github.com/${repo}.git`, `refs/tags/${ref}`],
+      { log, redact: [token], allowFailure: true })
+    if (lsRemote.code !== 0 || !lsRemote.stdout.includes(ref)) {
+      throw new Error(`npm 与 GitHub（${repo} tag ${ref}）都不存在 dsh@${ref.replace(DSH_TAG_PREFIX, '')}，`
+        + '请确认 dsh-version 正确')
+    }
+    let lastError
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await run('git', ['clone', '--depth', '1', '--branch', ref,
+          `https://${auth}github.com/${repo}.git`, srcDir], { log, redact: [token] })
+        lastError = undefined
+        break
+      } catch (error) {
+        lastError = error
+        await rm(srcDir, { recursive: true, force: true }) // 半截 clone 不污染续跑
+        log(`clone 第 ${attempt} 次失败，${attempt < 3 ? '重试…' : '放弃'}`)
+      }
+    }
+    if (lastError !== undefined) throw lastError
   }
+  if (process.platform === 'win32') patchRunConcurrentForWindows(srcDir, log)
   const env = { ...process.env, CI: '1' }
   log('源码树 pnpm install…')
   await run(binOf('pnpm'), ['install'], { cwd: srcDir, env, log })
@@ -108,6 +128,23 @@ export async function buildDistFromGithub(spec, rootDir, token, log) {
     throw new Error(`release:pack 后未找到 ${distDir}`)
   }
   return resolve(distDir)
+}
+
+/**
+ * Windows 下 release:pack 内部 runConcurrent 以 spawn('pnpm', …, {shell:false})
+ * 启动子进程——CreateProcess 无法直接执行 pnpm.cmd（上游 Windows bug）。
+ * 最小补丁：给 spawn 选项加 shell: true，仅影响构建期脚本。
+ */
+function patchRunConcurrentForWindows(srcDir, log) {
+  const file = join(srcDir, 'scripts', 'release', 'process.ts')
+  const source = readFileSync(file, 'utf8')
+  const needle = "{ cwd: options.cwd, env: options.env, stdio: 'inherit' }"
+  if (source.includes(`${needle.slice(0, -1)}, shell: true }`)) return // 已打过补丁
+  if (!source.includes(needle)) {
+    throw new Error(`无法在 ${file} 中定位 runConcurrent spawn 选项（上游已变更？）`)
+  }
+  writeFileSync(file, source.replace(needle, `${needle.slice(0, -1)}, shell: true }`), 'utf8')
+  log('已打 Windows 补丁：scripts/release/process.ts spawn 加 shell: true（修复 spawn pnpm ENOENT）')
 }
 
 /**
