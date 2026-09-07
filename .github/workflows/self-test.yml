@@ -1,0 +1,53 @@
+name: self-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launch-test:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs-on: windows-latest
+            label: windows
+          - runs-on: macos-latest
+            label: macos
+          - runs-on: ubuntu-latest
+            label: ubuntu
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # ubuntu runner 默认无显示服务，先起 Xvfb 提供桌面环境
+      - name: 启动 Xvfb 显示服务
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          nohup sudo Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
+      - name: DSH 生产环境启动测试
+        uses: ./
+        with:
+          dsh-version: 0.1.2-alpha.5
+          lang: zh-CN
+          simulated-llm: all
+          plugins: |
+            @dsh-plugin/dsh-loader
+          user-script: |
+            await screenshot('home');
+            await click('设置');
+            await screenshot('settings');
