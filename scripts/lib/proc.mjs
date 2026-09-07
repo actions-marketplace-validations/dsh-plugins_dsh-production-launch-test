@@ -57,3 +57,38 @@ export function run(command, args, options = {}) {
 export function binOf(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name
 }
+
+/**
+ * 终止整个进程树（dsh 会派生子进程）。
+ * Windows 用 taskkill /T；POSIX 上要求 spawn 时 detached:true，按进程组发信号。
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {(line: string) => void} [log]
+ */
+export async function killTree(child, log = () => {}) {
+  if (child.exitCode !== null || child.killed) return
+  try {
+    if (process.platform === 'win32') {
+      await run('taskkill', ['/pid', String(child.pid), '/T', '/F'], { log, allowFailure: true })
+    } else {
+      try {
+        process.kill(-child.pid, 'SIGTERM')
+      } catch {
+        child.kill('SIGTERM')
+      }
+      await new Promise(resolve => {
+        const timer = setTimeout(() => {
+          try {
+            process.kill(-child.pid, 'SIGKILL')
+          } catch { /* 已退出 */ }
+          resolve()
+        }, 5000)
+        child.once('exit', () => {
+          clearTimeout(timer)
+          resolve()
+        })
+      })
+    }
+  } catch (error) {
+    log(`killTree 告警：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
