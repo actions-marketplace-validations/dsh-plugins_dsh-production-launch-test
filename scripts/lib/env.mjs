@@ -66,6 +66,7 @@ export function readInputs(env = process.env) {
   }
   return {
     dshVersion,
+    dshSource: (env.INPUT_DSH_SOURCE ?? '').trim(),
     lang: (env.INPUT_LANG ?? 'zh-CN').trim() || 'zh-CN',
     simulatedLlm: env.INPUT_SIMULATED_LLM ?? 'false',
     pluginsRaw: env.INPUT_PLUGINS ?? '',
