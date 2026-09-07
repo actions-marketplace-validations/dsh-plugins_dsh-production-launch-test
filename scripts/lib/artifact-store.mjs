@@ -9,7 +9,7 @@
  */
 
 import { createWriteStream } from 'node:fs'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, open, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { run } from './proc.mjs'
@@ -51,9 +51,26 @@ export async function downloadArtifactByName({ name, destDir, token, log }) {
   await mkdir(destDir, { recursive: true })
   const zipPath = join(destDir, '__artifact.zip')
   await pipeline(dlRes.body, createWriteStream(zipPath))
+  await assertZipMagic(zipPath, dlRes)
   await extractZip(zipPath, destDir, log)
   await rm(zipPath, { force: true })
   return destDir
+}
+
+/** 校验下载内容确实是 zip（PK\x03\x04），否则带响应信息报错便于诊断。 */
+async function assertZipMagic(zipPath, response) {
+  const handle = await open(zipPath, 'r')
+  try {
+    const buf = Buffer.alloc(4)
+    await handle.read(buf, 0, 4, 0)
+    if (buf[0] !== 0x50 || buf[1] !== 0x4b) {
+      throw new Error(`artifact 下载内容不是 zip（前 4 字节 ${buf.toString('hex')}；`
+        + `HTTP ${response.status}，content-type=${response.headers.get('content-type')}，`
+        + `content-encoding=${response.headers.get('content-encoding')}，url=${response.url}）`)
+    }
+  } finally {
+    await handle.close()
+  }
 }
 
 async function extractZip(zipPath, destDir, log) {
@@ -62,7 +79,12 @@ async function extractZip(zipPath, destDir, log) {
     if (result.code === 0) return
     log('unzip 不可用，回退 tar')
   }
-  // 以 destDir 为 cwd、相对路径引用 zip：规避 Windows bsdtar 把 D:\ 误判为
-  // rmt 远程主机语法（--force-local 并非所有 bsdtar 版本都支持）
+  if (process.platform === 'win32') {
+    // 规避 bsdtar 版本差异（D:\ 误判 rmt 语法、--force-local 支持不一）
+    await run('powershell', ['-NoProfile', '-Command',
+      `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${destDir}' -Force`], { log })
+    return
+  }
+  // macOS / linux 回退：bsdtar 直接读 zip；以 destDir 为 cwd 规避路径解析差异
   await run('tar', ['-xf', '__artifact.zip'], { cwd: destDir, log })
 }
