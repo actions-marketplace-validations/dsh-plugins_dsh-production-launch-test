@@ -188,7 +188,7 @@ function pnpmWorkspaceYamlSource(deps, versionDir) {
   const overrideLines = Object.entries(deps)
     .map(([name, spec]) => `  "${name}": "${spec}"`)
     .join('\n')
-  const builds = ['@google/genai', 'esbuild', 'koffi', 'node-pty', 'protobufjs']
+  const builds = ['@google/genai', 'esbuild', 'fs-ext', 'koffi', 'node-pty', 'protobufjs']
     .map(name => `  "${name}": true`)
   const subprocess = deps['@deepseek-ai/dsh-subprocess-local']
   if (subprocess !== undefined) {

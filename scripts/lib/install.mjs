@@ -19,6 +19,7 @@ const ALLOW_BUILDS = [
   '@deepseek-ai/dsh-subprocess-local',
   '@google/genai',
   'esbuild',
+  'fs-ext',
   'koffi',
   'node-pty',
   'protobufjs',
