@@ -3,3 +3,4 @@ artifacts/
 .dsh-plt/
 *.log
 .dsh-plt-tmp/
+.plt-*/
