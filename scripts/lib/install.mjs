@@ -70,6 +70,13 @@ export async function installDsh({ version, rootDir, token = '', log }) {
   }
   await mkdir(versionDir, { recursive: true })
   await writeText(join(versionDir, 'pnpm-workspace.yaml'), pnpmWorkspaceYaml())
+  // pnpm ≥11.17 在没有 package.json 的目录里以 add 模式安装时会静默跳过全部
+  // 构建脚本（allowBuilds 也不生效，0.1.3 起 fs-ext 原生绑定缺失导致启动即崩），
+  // 因此先落一个最小 manifest 再装。
+  const pkgPath = join(versionDir, 'package.json')
+  if (!existsSync(pkgPath)) {
+    await writeText(pkgPath, `${JSON.stringify({ private: true, name: `dsh-version-${version}` }, null, 2)}\n`)
+  }
   log(`安装 @deepseek-ai/dsh@${version} → ${versionDir}`)
   let lastError
   for (let attempt = 1; attempt <= 3; attempt += 1) {
