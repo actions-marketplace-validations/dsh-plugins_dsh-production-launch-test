@@ -142,7 +142,14 @@ provider 路由（`sim-<协议>`），暴露模型 `test-model`，因此可以�
 | API | 行为 |
 | --- | --- |
 | `click(text, opts?)` | 按 role（`button`/`link`/`menuitem`/`tab`，先精确后模糊）点击，回退到可见文本。 |
-| `sendMessage(text)` | 聚焦聊天输入框、填入文本并按 Enter 提交。 |
+| `sendMessage(text)` | 聚焦聊天输入框、填入文本并按 Enter 提交；页面没有可见输入框时（例如还停在“选择工作区”欢迎页）回退到 `session/prompt` RPC 提交。 |
+
+> 首次启动会弹「内测声明」弹窗，用 `try { await click('继续'); } catch {}` 关闭
+> （英文界面为 `click('Continue')`）。
+>
+> DSH 会话始终声明工具，所以模拟 LLM 会话首轮命中规则 2（固定工具调用），
+> 随后命中规则 1（收尾文本 `工具结果已收到，任务完成。`）；断言请针对收尾文本，
+> 而不是纯文本回显。
 | `selectModel('provider/model')` | 经页面自身的 `session.selectModel` RPC 在最近一个会话上切换模型。 |
 | `screenshot(name?)` | 保存 `artifacts/screenshots/NN-<name>.png`，返回路径。 |
 | `waitFor(text, timeoutMs?)` | 等待 `text` 在页面可见（默认 15s）。 |

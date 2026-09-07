@@ -48,6 +48,10 @@ jobs:
           plugins: |
             @dsh-plugin/dsh-loader
           user-script: |
+            try { await click('继续'); } catch {}
             await screenshot('home');
             await click('设置');
             await screenshot('settings');
+            await sendMessage('测试');
+            await sleep(8000);
+            await screenshot('reply');

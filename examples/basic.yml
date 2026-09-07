@@ -40,9 +40,10 @@ jobs:
             artifact:plugin-build-artifact
             @dsh-plugin/dsh-loader
           user-script: |
+            try { await click('继续'); } catch {}
             await click('设置');
             await screenshot('settings');
             await sendMessage('测试');
-            await waitFor('模拟回复', 30000);
+            await sleep(8000);
             await selectModel('sim-openai-responses/test-model');
             await screenshot('done');

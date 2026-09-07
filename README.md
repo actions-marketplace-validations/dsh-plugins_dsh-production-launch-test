@@ -145,7 +145,14 @@ Injected as page globals before your script runs (all async):
 | API | Behavior |
 | --- | --- |
 | `click(text, opts?)` | Clicks by role (`button`/`link`/`menuitem`/`tab`, exact then fuzzy) falling back to visible text. |
-| `sendMessage(text)` | Focuses the chat composer, fills it and submits with Enter. |
+| `sendMessage(text)` | Focuses the chat composer, fills it and submits with Enter; falls back to the `session/prompt` RPC when no composer is visible (e.g. the workspace picker is still showing). |
+
+> First boot shows the beta-notice modal — dismiss it with `try { await click('继续'); } catch {}`
+> (or `click('Continue')` in English).
+>
+> DSH sessions always declare tools, so a simulated-LLM conversation hits rule 2 first
+> (a fixed tool call) and then rule 1 (the closing text `工具结果已收到，任务完成。`);
+> assert on that instead of the plain-text echo.
 | `selectModel('provider/model')` | Calls the page's own `session.selectModel` RPC on the most recent session. |
 | `screenshot(name?)` | Saves `artifacts/screenshots/NN-<name>.png`; returns the path. |
 | `waitFor(text, timeoutMs?)` | Waits until `text` is visible (default 15s). |
