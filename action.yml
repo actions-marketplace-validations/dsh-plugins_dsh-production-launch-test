@@ -1,0 +1,96 @@
+name: dsh-production-launch-test
+
+description: >-
+  在带桌面环境的 runner 上安装指定版本的 DSH、启动生产 Web GUI，并用系统 Chrome
+  执行用户脚本进行端到端测试；宿主与浏览器控制台日志打包上传为 artifact，
+  任何插件加载失败都会让本 action 失败。
+
+author: dsh-plugins
+
+branding:
+  icon: play-circle
+  color: blue
+
+inputs:
+  dsh-version:
+    description: >-
+      要安装并启动的 @deepseek-ai/dsh npm 版本（例如 0.1.3-alpha.1）。
+      版本不存在于 npm 时 action 失败。
+    required: true
+  lang:
+    description: >-
+      Web GUI 界面语言（BCP 47，例如 zh-CN / en-US）。映射到 DSH 的
+      locale.preference 并同步 Chrome 的 navigator.languages。
+    required: false
+    default: zh-CN
+  simulated-llm:
+    description: >-
+      启用模拟 LLM 服务：空格分隔的协议列表，可选
+      openai-completions / openai-responses / anthropic-messages / all / false。
+      true 等价于 all；false 不启动模拟服务（需要调用方自行提供真实凭据）。
+    required: false
+    default: 'false'
+  plugins:
+    description: >-
+      多行文本，每行一个插件规格。支持：
+      artifact:<artifact 名>；
+      github:user/repo[#commit=<sha>|@<release-tag>][#path/<子目录或 .tgz>]；
+      @npm-scope/plugin[@version] 及裸 npm 包名。
+    required: false
+    default: ''
+  user-script:
+    description: >-
+      在浏览器页面中执行的用户脚本（JS 源码，将被包装为 async 函数），
+      或 {owner}/{repo}/{path}@{ref} 从 GitHub 拉取脚本文件。
+      执行前已注入 click / sendMessage / selectModel / screenshot /
+      waitFor / sleep / currentUrl 等 API。
+    required: false
+    default: ''
+  github-token:
+    description: 拉取私有 GitHub 插件/脚本与下载 artifact 使用的 token。
+    required: false
+    default: ${{ github.token }}
+  node-version:
+    description: >-
+      约定的 Node 主版本（调用方须先用 actions/setup-node 安装）。
+      启动时校验当前 node 满足 DSH engines（^22.19.0 || >=24）。
+    required: false
+    default: '24'
+  profile:
+    description: 测试使用的 DSH profile 名（由 web profile 复制而来）。
+    required: false
+    default: test
+  timeout-seconds:
+    description: 用户脚本阶段的整体超时（秒）。
+    required: false
+    default: '600'
+
+outputs:
+  web-url:
+    description: 本次启动的 DSH Web GUI 带 token 地址（job 结束后即失效）。
+    value: ${{ steps.run.outputs.web-url }}
+  logs-dir:
+    description: 日志与截图产物目录（artifact 上传失败时可据此自行上传）。
+    value: ${{ steps.run.outputs.logs-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: 安装 action 运行时依赖
+      shell: bash
+      run: npm ci --prefix "${{ github.action_path }}" --no-audit --no-fund
+
+    - name: 运行 DSH 生产环境测试
+      id: run
+      shell: bash
+      env:
+        INPUT_DSH_VERSION: ${{ inputs.dsh-version }}
+        INPUT_LANG: ${{ inputs.lang }}
+        INPUT_SIMULATED_LLM: ${{ inputs.simulated-llm }}
+        INPUT_PLUGINS: ${{ inputs.plugins }}
+        INPUT_USER_SCRIPT: ${{ inputs.user-script }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_NODE_VERSION: ${{ inputs.node-version }}
+        INPUT_PROFILE: ${{ inputs.profile }}
+        INPUT_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: node "${{ github.action_path }}/scripts/main.mjs"

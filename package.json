@@ -1,0 +1,17 @@
+{
+  "name": "dsh-production-launch-test",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GitHub Action：在带桌面环境的 runner 上启动 DSH 生产 Web GUI 并用 Chrome 执行用户脚本进行端到端测试",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "@actions/artifact": "^2.3.2",
+    "playwright-core": "^1.49.0"
+  }
+}
