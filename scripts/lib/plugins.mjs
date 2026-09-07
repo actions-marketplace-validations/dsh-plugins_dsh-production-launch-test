@@ -21,6 +21,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { downloadArtifactByName } from './artifact-store.mjs'
 import { binOf, run } from './proc.mjs'
 
 /** @typedef {{ kind: 'artifact', name: string, raw: string }} ArtifactSpec */
@@ -205,15 +206,10 @@ async function packDirectory(dir, outDir, log) {
   return resolve(join(outDir, tgz))
 }
 
-async function materializeArtifact(spec, { workDir, token, log = () => {} }) {
-  // 延迟加载：非 Actions 环境（本地调试）没有 artifact 服务
-  const { DefaultArtifactClient } = await import('@actions/artifact')
-  const client = new DefaultArtifactClient()
+async function materializeArtifact(spec, { workDir, token = '', log = () => {} }) {
   const dest = join(workDir, `artifact-${shortHash(spec.raw)}`)
   await mkdir(dest, { recursive: true })
-  log(`下载 artifact：${spec.name}`)
-  const { artifact } = await client.getArtifact(spec.name)
-  await client.downloadArtifact(artifact.id, { path: dest, ...(token ? { token } : {}) })
+  await downloadArtifactByName({ name: spec.name, destDir: dest, token, log })
 
   const entries = await readdir(dest, { recursive: true })
   const tgz = entries.map(String).find(name => name.endsWith('.tgz'))

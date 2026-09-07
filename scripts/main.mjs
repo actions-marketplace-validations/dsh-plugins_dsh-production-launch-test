@@ -24,7 +24,7 @@ import {
   parseSimulatedLlmSpec,
   startSimulatedLlm,
 } from './lib/simulated-llm.mjs'
-import { uploadArtifacts, writeOutputs, writeSummary } from './lib/upload.mjs'
+import { writeOutputs, writeSummary } from './lib/upload.mjs'
 
 /** user-script 为 {owner}/{repo}/{path}@{ref} 时从 GitHub raw 拉取脚本内容。 */
 async function resolveUserScript(source, token, log) {
@@ -46,9 +46,20 @@ async function ensurePnpm(log) {
     log(`pnpm ${probe.stdout.trim()} 就绪`)
     return
   }
-  log('pnpm 不可用，经 corepack 准备 pnpm@11.17.0…')
-  await run('corepack', ['prepare', 'pnpm@11.17.0', '--activate'], { log })
-  await run(binOf('pnpm'), ['--version'], { log })
+  log('pnpm 不可用，尝试 corepack 准备 pnpm@11.17.0…')
+  // corepack 本身可能缺 shim（windows 的 corepack.cmd / node>=25 移除），失败则退回 npm 全局安装
+  const enable = await run(binOf('corepack'), ['enable'], { log, allowFailure: true })
+  const prepare = enable.code === 0
+    ? await run(binOf('corepack'), ['prepare', 'pnpm@11.17.0', '--activate'], { log, allowFailure: true })
+    : { code: -1 }
+  const verify = prepare.code === 0
+    ? await run(binOf('pnpm'), ['--version'], { log, allowFailure: true })
+    : { code: -1 }
+  if (verify.code !== 0) {
+    log('corepack 路径不可用，经 npm 全局安装 pnpm@11.17.0…')
+    await run(binOf('npm'), ['install', '-g', 'pnpm@11.17.0'], { log })
+    await run(binOf('pnpm'), ['--version'], { log })
+  }
 }
 
 async function main() {
@@ -204,8 +215,11 @@ async function main() {
   ].join('\n')
   await writeSummary(summary)
 
-  const artifactName = `dsh-test-${process.platform}-${inputs.dshVersion}-${process.env.GITHUB_RUN_ATTEMPT ?? 'local'}`
-  await uploadArtifacts({ dir: artifactsDir, name: artifactName, log })
+  // 上传由 action.yml 的嵌套 actions/upload-artifact 步骤完成
+  // （composite run 步骤拿不到 ACTIONS_RUNTIME_TOKEN，@actions/artifact 无法上传）
+  if (process.env.GITHUB_ACTIONS !== 'true') {
+    log(`非 GitHub Actions 环境，产物保留在 ${artifactsDir}`)
+  }
   await writeOutputs({ 'logs-dir': artifactsDir })
 
   if (!ok) {

@@ -34,7 +34,12 @@ Given a DSH version, this action:
 | Desktop environment | Windows / macOS runners pass directly. Linux runners must provide a display first (e.g. Xvfb) — the action fails fast when `DISPLAY`/`WAYLAND_DISPLAY` is unset. |
 | Node | `^22.19.0 \|\| >=24` (DSH engines). Run `actions/setup-node@v4` before this action. |
 | Chrome | System Chrome, used via playwright-core `channel: 'chrome'`. Preinstalled on all GitHub-hosted desktop runners. |
-| pnpm | The action self-provisions pnpm 11.17 through corepack when missing. |
+| pnpm | The action self-provisions pnpm 11.17 when missing (corepack first, falling back to `npm i -g`). |
+| Permissions | Workflows using `artifact:` plugin specs or `dsh-source: artifact:` must grant `actions: read` (artifacts are downloaded through the REST API). |
+
+Logs and screenshots are uploaded by a nested `actions/upload-artifact` step inside the
+action (composite `run` steps never receive `ACTIONS_RUNTIME_TOKEN`, so in-process upload
+is impossible). Artifact name: `dsh-test-<OS>-<dsh-version>-<attempt>`, kept for 14 days.
 
 ## Usage
 

@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read  # build-source 产物经 REST API 下载需要
 
 jobs:
   # 动态解析版本矩阵与插件规格

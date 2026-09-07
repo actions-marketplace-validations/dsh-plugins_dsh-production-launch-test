@@ -104,3 +104,13 @@ runs:
         INPUT_PROFILE: ${{ inputs.profile }}
         INPUT_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
       run: node "${{ github.action_path }}/scripts/main.mjs"
+
+    # composite 的 run 步骤拿不到 ACTIONS_RUNTIME_TOKEN，上传必须交给 JS action 步骤
+    - name: 上传日志与截图 artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dsh-test-${{ runner.os }}-${{ inputs.dsh-version }}-${{ github.run_attempt }}
+        path: artifacts/
+        retention-days: 14
+        if-no-files-found: warn

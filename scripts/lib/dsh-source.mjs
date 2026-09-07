@@ -16,6 +16,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
+import { downloadArtifactByName } from './artifact-store.mjs'
 import { binOf, run } from './proc.mjs'
 
 /** dist tgz 文件名 → 包名（deepseek-ai-dsh-web-0.1.2-alpha.1.tgz → @deepseek-ai/dsh-web）。 */
@@ -40,7 +41,7 @@ export async function installDshFromSource({ source, version, rootDir, token = '
 
   let distDir
   if (source.startsWith('artifact:')) {
-    distDir = await downloadDistArtifact(source.slice('artifact:'.length), rootDir, log)
+    distDir = await downloadDistArtifact(source.slice('artifact:'.length), rootDir, token, log)
   } else if (source.startsWith('github:')) {
     distDir = await buildDistFromGithub(source.slice('github:'.length), rootDir, token, log)
   } else if (source.startsWith('dir:')) {
@@ -80,14 +81,10 @@ export async function installDshFromSource({ source, version, rootDir, token = '
 }
 
 /** 下载含 dist/npm tgz 集合的 artifact，返回 tgz 所在目录。 */
-async function downloadDistArtifact(name, rootDir, log) {
-  const { DefaultArtifactClient } = await import('@actions/artifact')
-  const client = new DefaultArtifactClient()
+async function downloadDistArtifact(name, rootDir, token, log) {
   const dest = join(rootDir, 'materialized', `dsh-src-${name}`)
   await mkdir(dest, { recursive: true })
-  log(`下载 dsh 源码构建产物 artifact：${name}`)
-  const { artifact } = await client.getArtifact(name)
-  await client.downloadArtifact(artifact.id, { path: dest })
+  await downloadArtifactByName({ name, destDir: dest, token, log })
   // 产物可能直接是 tgz 平铺，也可能嵌一层目录
   const tgzDir = await findTgzDir(dest)
   if (tgzDir === null) throw new Error(`artifact ${name} 内容中找不到 *.tgz：${dest}`)

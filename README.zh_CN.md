@@ -32,7 +32,12 @@
 | 桌面环境 | Windows / macOS runner 直接通过。Linux runner 须先提供显示服务（如 Xvfb）——`DISPLAY`/`WAYLAND_DISPLAY` 均未设置时 action 直接失败。 |
 | Node | `^22.19.0 \|\| >=24`（DSH engines）。请先运行 `actions/setup-node@v4`。 |
 | Chrome | 系统 Chrome，经 playwright-core `channel: 'chrome'` 调用。GitHub 托管的桌面 runner 均已预装。 |
-| pnpm | 缺失时由 action 通过 corepack 自备 pnpm 11.17。 |
+| pnpm | 缺失时由 action 自备 pnpm 11.17（corepack 优先，退回 `npm i -g`）。 |
+| 权限 | 用到 `artifact:` 插件规格或 `dsh-source: artifact:` 时，工作流需授予 `actions: read`（artifact 经 REST API 下载）。 |
+
+日志与截图由 action 内嵌的 `actions/upload-artifact` 步骤上传
+（composite 的 run 步骤拿不到 `ACTIONS_RUNTIME_TOKEN`，不能进程内上传），
+artifact 名 `dsh-test-<OS>-<dsh版本>-<尝试次数>`，保留 14 天。
 
 ## 使用
 

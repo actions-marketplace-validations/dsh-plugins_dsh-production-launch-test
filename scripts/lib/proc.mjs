@@ -50,7 +50,14 @@ export function run(command, args, options = {}) {
         if (line !== '') log(`  ${redact.reduce((t, s) => (s === '' ? t : t.split(s).join('***')), line)}`)
       }
     })
-    child.once('error', reject)
+    child.once('error', error => {
+      // spawn 失败（如 ENOENT 命令不存在）在 allowFailure 下也按失败码返回
+      if (allowFailure) {
+        resolve({ code: -1, stdout, stderr: `${stderr}${error.message}` })
+      } else {
+        reject(error)
+      }
+    })
     child.once('close', code => {
       const result = { code: code ?? 1, stdout, stderr }
       if (result.code !== 0 && !allowFailure) {
