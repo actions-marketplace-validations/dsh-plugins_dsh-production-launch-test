@@ -62,7 +62,7 @@ async function extractZip(zipPath, destDir, log) {
     if (result.code === 0) return
     log('unzip 不可用，回退 tar')
   }
-  // Windows bsdtar 把 D:\... 误判为 rmt 远程主机语法，必须 --force-local
-  const forceLocal = process.platform === 'win32' ? ['--force-local'] : []
-  await run('tar', [...forceLocal, '-xf', zipPath, '-C', destDir], { log })
+  // 以 destDir 为 cwd、相对路径引用 zip：规避 Windows bsdtar 把 D:\ 误判为
+  // rmt 远程主机语法（--force-local 并非所有 bsdtar 版本都支持）
+  await run('tar', ['-xf', '__artifact.zip'], { cwd: destDir, log })
 }
