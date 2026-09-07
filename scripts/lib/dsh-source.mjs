@@ -112,7 +112,7 @@ export async function buildDistFromGithub(spec, rootDir, token, log) {
     }
     if (lastError !== undefined) throw lastError
   }
-  if (process.platform === 'win32') patchRunConcurrentForWindows(srcDir, log)
+  if (process.platform === 'win32') patchWindowsSourceBuild(srcDir, log)
   const env = { ...process.env, CI: '1' }
   log('源码树 pnpm install…')
   await run(binOf('pnpm'), ['install'], { cwd: srcDir, env, log })
@@ -131,20 +131,51 @@ export async function buildDistFromGithub(spec, rootDir, token, log) {
 }
 
 /**
- * Windows 下 release:pack 内部 runConcurrent 以 spawn('pnpm', …, {shell:false})
- * 启动子进程——CreateProcess 无法直接执行 pnpm.cmd（上游 Windows bug）。
- * 最小补丁：给 spawn 选项加 shell: true，仅影响构建期脚本。
+ * Windows 下 release:pack 的两处上游 bug，最小补丁（仅影响构建期脚本）：
+ * 1. process.ts runConcurrent 以 spawn('pnpm', …, {shell:false}) 启动子进程——
+ *    CreateProcess 无法直接执行 pnpm.cmd → 给 spawn 选项加 shell: true。
+ * 2. tarball.ts 以绝对路径（D:\…）调用系统 bsdtar，runner 版 bsdtar 把盘符
+ *    误判为 rmt 远程主机语法（--force-local 版本支持不一，本机 3.8.4 反而不支持）→
+ *    改为以包所在目录为 cwd、传 basename。
  */
-function patchRunConcurrentForWindows(srcDir, log) {
-  const file = join(srcDir, 'scripts', 'release', 'process.ts')
-  const source = readFileSync(file, 'utf8')
-  const needle = "{ cwd: options.cwd, env: options.env, stdio: 'inherit' }"
-  if (source.includes(`${needle.slice(0, -1)}, shell: true }`)) return // 已打过补丁
-  if (!source.includes(needle)) {
-    throw new Error(`无法在 ${file} 中定位 runConcurrent spawn 选项（上游已变更？）`)
+function patchWindowsSourceBuild(srcDir, log) {
+  const patched = []
+
+  const processFile = join(srcDir, 'scripts', 'release', 'process.ts')
+  const processSource = readFileSync(processFile, 'utf8')
+  const spawnNeedle = "{ cwd: options.cwd, env: options.env, stdio: 'inherit' }"
+  const spawnPatched = `${spawnNeedle.slice(0, -1)}, shell: true }`
+  if (processSource.includes(spawnPatched)) {
+    // 已打过
+  } else if (processSource.includes(spawnNeedle)) {
+    writeFileSync(processFile, processSource.replace(spawnNeedle, spawnPatched), 'utf8')
+    patched.push('process.ts spawn shell:true')
+  } else {
+    throw new Error(`无法在 ${processFile} 中定位 runConcurrent spawn 选项（上游已变更？）`)
   }
-  writeFileSync(file, source.replace(needle, `${needle.slice(0, -1)}, shell: true }`), 'utf8')
-  log('已打 Windows 补丁：scripts/release/process.ts spawn 加 shell: true（修复 spawn pnpm ENOENT）')
+
+  const tarballFile = join(srcDir, 'scripts', 'release', 'tarball.ts')
+  let tarballSource = readFileSync(tarballFile, 'utf8')
+  if (tarballSource.includes('cwd: dirname(tarball)')) {
+    // 已打过
+  } else if (
+    tarballSource.includes("capture('tar', ['-tzf', tarball])")
+    && tarballSource.includes("capture('tar', ['-xOzf', tarball, 'package/package.json'])")
+    && tarballSource.includes("from 'node:path'")
+  ) {
+    tarballSource = tarballSource
+      .replace("import { join } from 'node:path'", "import { basename, dirname, join } from 'node:path'")
+      .replace("capture('tar', ['-tzf', tarball])",
+        "capture('tar', ['-tzf', basename(tarball)], { cwd: dirname(tarball) })")
+      .replace("capture('tar', ['-xOzf', tarball, 'package/package.json'])",
+        "capture('tar', ['-xOzf', basename(tarball), 'package/package.json'], { cwd: dirname(tarball) })")
+    writeFileSync(tarballFile, tarballSource, 'utf8')
+    patched.push('tarball.ts tar 相对路径')
+  } else {
+    throw new Error(`无法在 ${tarballFile} 中定位 tar 调用（上游已变更？）`)
+  }
+
+  if (patched.length > 0) log(`已打 Windows 补丁：${patched.join('；')}`)
 }
 
 /**
