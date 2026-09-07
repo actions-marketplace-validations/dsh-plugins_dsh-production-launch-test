@@ -76,11 +76,28 @@ jobs:
 
 See [examples/basic.yml](examples/basic.yml) for a complete plugin-repo workflow.
 
+### Full compatibility sweep
+
+[.github/workflows/all-plugins-all-versions.yml](.github/workflows/all-plugins-all-versions.yml)
+(manually triggered, also serves as a copy-paste example) resolves **at every run**:
+
+- every DSH version ≥ `0.1.0-rc.6` from npm ∪ GitHub Releases (`dsh-v*` tags) — versions
+  that exist only on GitHub are built from source once per version by a `build-source`
+  job and handed to the test cells as `artifact:dsh-src-<version>`;
+- the newest of each plugin's `latest`/`next` npm dist-tags for the seven workspace
+  plugins (`dsh-thought-buddy`, `dsh-approve-for-me`, `dsh-auxiliary`,
+  `dsh-better-sidebar-loader`, `dsh-code-review`, `dsh-loader`, `dsh-network-settings`),
+  all installed into one shared profile;
+
+then runs the matrix `windows / macos / ubuntu × <every dsh version>` with
+`fail-fast: false`, so each environment's plugin compatibility shows up as its own cell.
+
 ## Inputs
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `dsh-version` | ✅ | — | `@deepseek-ai/dsh` npm version to install and boot (e.g. `0.1.3-alpha.1`). |
+| `dsh-version` | ✅ | — | `@deepseek-ai/dsh` npm version to install and boot (e.g. `0.1.3-alpha.1`). When `dsh-source` is set, this only serves as the version label. |
+| `dsh-source` | | — | Source-build channel for versions missing from npm (GitHub-Releases-only): `artifact:<name>` (an artifact of the current run holding the `dist/npm` tgz set) or `github:<owner>/<repo>@<ref>` (clone + `pnpm build` + `release:pack` in place, slow). Empty = install `dsh-version` from npm. |
 | `lang` | | `zh-CN` | Web GUI language (BCP 47). Mapped to DSH `locale.preference` (`zh`/`en`) and to Chrome's `navigator.languages`. |
 | `simulated-llm` | | `false` | Space-separated protocols: `openai-completions` / `openai-responses` / `anthropic-messages` / `all` / `false`. `true` is an alias of `all`. |
 | `plugins` | | — | One plugin spec per line (grammar below). |

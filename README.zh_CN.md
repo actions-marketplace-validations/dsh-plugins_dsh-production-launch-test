@@ -74,11 +74,27 @@ jobs:
 
 完整的插件仓库工作流见 [examples/basic.yml](examples/basic.yml)。
 
+### 全量兼容矩阵
+
+[.github/workflows/all-plugins-all-versions.yml](.github/workflows/all-plugins-all-versions.yml)
+（手动触发，也可直接复制为调用方示例）**每次触发都重新解析**：
+
+- dsh 版本清单：npm `@deepseek-ai/dsh` 全部版本 ∪ GitHub Releases（`dsh-v*` tag），
+  取 ≥ `0.1.0-rc.6`；npm 上缺失的版本由 `build-source` job 从源码构建一次
+  （clone + `pnpm build` + `release:pack`），以 `artifact:dsh-src-<版本>` 供全部 OS 复用；
+- 7 个工作区插件（`dsh-thought-buddy`、`dsh-approve-for-me`、`dsh-auxiliary`、
+  `dsh-better-sidebar-loader`、`dsh-code-review`、`dsh-loader`、`dsh-network-settings`）
+  的 npm dist-tags 在 `latest` 与 `next` 中取较新者，全部装进同一个测试 profile；
+
+然后按 `windows / macos / ubuntu × <全部 dsh 版本>` 矩阵运行（`fail-fast: false`），
+每个环境的插件兼容性以独立单元呈现。
+
 ## 输入
 
 | 输入 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `dsh-version` | ✅ | — | 要安装并启动的 `@deepseek-ai/dsh` npm 版本（如 `0.1.3-alpha.1`）。 |
+| `dsh-version` | ✅ | — | 要安装并启动的 `@deepseek-ai/dsh` npm 版本（如 `0.1.3-alpha.1`）。设置了 `dsh-source` 时仅作版本标签。 |
+| `dsh-source` | | — | npm 上缺失版本（GitHub Releases 独占）的源码构建通道：`artifact:<name>`（当前 run 中含 `dist/npm` tgz 集合的 artifact）或 `github:<owner>/<repo>@<ref>`（现场克隆 + `pnpm build` + `release:pack`，较慢）。为空时按 `dsh-version` 从 npm 安装。 |
 | `lang` | | `zh-CN` | Web GUI 界面语言（BCP 47）。映射到 DSH `locale.preference`（`zh`/`en`），并同步 Chrome 的 `navigator.languages`。 |
 | `simulated-llm` | | `false` | 空格分隔的协议列表：`openai-completions` / `openai-responses` / `anthropic-messages` / `all` / `false`。`true` 等价于 `all`。 |
 | `plugins` | | — | 每行一个插件规格（语法见下）。 |
