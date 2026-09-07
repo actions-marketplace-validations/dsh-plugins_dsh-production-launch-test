@@ -19,10 +19,10 @@ describe('parsePluginSpec', () => {
       { kind: 'github', owner: 'user', repo: 'repo', path: 'path/to/plugin.tgz', commit: '1234abc' }],
     ['github:user/repo#path/to/plugin.tgz@release-tag',
       { kind: 'github', owner: 'user', repo: 'repo', path: 'path/to/plugin.tgz', tag: 'release-tag' }],
-    ['@npm-scope/plugin@version', { kind: 'npm', name: '@npm-scope/plugin@version' }],
-    ['@npm-scope/plugin', { kind: 'npm', name: '@npm-scope/plugin' }],
-    ['bare-name@1.2.3', { kind: 'npm', name: 'bare-name@1.2.3' }],
-    ['bare-name', { kind: 'npm', name: 'bare-name' }],
+    ['@npm-scope/plugin@version', { kind: 'npm', name: '@npm-scope/plugin@version', packageName: '@npm-scope/plugin' }],
+    ['@npm-scope/plugin', { kind: 'npm', name: '@npm-scope/plugin', packageName: '@npm-scope/plugin' }],
+    ['bare-name@1.2.3', { kind: 'npm', name: 'bare-name@1.2.3', packageName: 'bare-name' }],
+    ['bare-name', { kind: 'npm', name: 'bare-name', packageName: 'bare-name' }],
   ]
   for (const [input, expected] of cases) {
     it(`解析 ${input}`, () => {

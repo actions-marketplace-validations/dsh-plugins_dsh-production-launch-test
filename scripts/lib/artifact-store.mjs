@@ -62,5 +62,7 @@ async function extractZip(zipPath, destDir, log) {
     if (result.code === 0) return
     log('unzip 不可用，回退 tar')
   }
-  await run('tar', ['-xf', zipPath, '-C', destDir], { log })
+  // Windows bsdtar 把 D:\... 误判为 rmt 远程主机语法，必须 --force-local
+  const forceLocal = process.platform === 'win32' ? ['--force-local'] : []
+  await run('tar', [...forceLocal, '-xf', zipPath, '-C', destDir], { log })
 }

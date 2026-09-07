@@ -27,7 +27,7 @@ import { binOf, run } from './proc.mjs'
 /** @typedef {{ kind: 'artifact', name: string, raw: string }} ArtifactSpec */
 /** @typedef {{ kind: 'github', owner: string, repo: string, path?: string,
  *   commit?: string, tag?: string, raw: string }} GithubSpec */
-/** @typedef {{ kind: 'npm', name: string, raw: string }} NpmSpec */
+/** @typedef {{ kind: 'npm', name: string, packageName: string, raw: string }} NpmSpec */
 /** @typedef {ArtifactSpec | GithubSpec | NpmSpec} PluginSpec */
 
 /**
@@ -61,9 +61,15 @@ export function parsePluginSpec(line) {
   }
   // npm 规格：@scope/name[@version] 或 bare[@version]
   if (/^(?:@[\w.-]+\/)?[\w.-]+(?:@[\w.:*~^>= -]+)?$/u.test(line)) {
-    return { kind: 'npm', name: line, raw: line }
+    return { kind: 'npm', name: line, packageName: npmPackageName(line), raw: line }
   }
   throw new Error(`无法识别的插件规格：${line}`)
+}
+
+/** npm 规格 → 纯包名（剥离 @version；scoped 名的前导 @ 保留）。 */
+export function npmPackageName(spec) {
+  const at = spec.indexOf('@', 1) // 跳过 scoped 的前导 @
+  return at === -1 ? spec : spec.slice(0, at)
 }
 
 /**
@@ -123,7 +129,7 @@ function parseGithubSpec(line) {
 export async function materializePlugin(spec, options) {
   switch (spec.kind) {
     case 'npm':
-      return { target: spec.name, display: spec.name }
+      return { target: spec.name, display: spec.name, packageName: spec.packageName }
     case 'github':
       return materializeGithub(spec, options)
     case 'artifact':
@@ -182,7 +188,8 @@ async function materializeGithub(spec, { workDir, token, log = () => {} }) {
   if (!existsSync(join(packDir, 'package.json'))) {
     throw new Error(`${display}：${packDir} 下没有 package.json，无法打包为插件`)
   }
-  return { target: await packDirectory(packDir, workDir, log), display }
+  const { target, packageName } = await packDirectory(packDir, workDir, log)
+  return { target, display, packageName }
 }
 
 /** 对含 package.json 的目录执行 pnpm pack（失败回退 npm pack），返回 tgz 路径与包名。 */
@@ -203,7 +210,7 @@ async function packDirectory(dir, outDir, log) {
   if (tgz === undefined) {
     throw new Error(`pack ${dir} 未产出 tgz（输出：${packed.stdout.slice(-500)}）`)
   }
-  return resolve(join(outDir, tgz))
+  return { target: resolve(join(outDir, tgz)), packageName: pkg.name }
 }
 
 async function materializeArtifact(spec, { workDir, token = '', log = () => {} }) {
@@ -220,11 +227,13 @@ async function materializeArtifact(spec, { workDir, token = '', log = () => {} }
   for (const entry of entries.map(String)) {
     const candidate = join(dest, entry, 'package.json')
     if (existsSync(candidate)) {
-      return { target: await packDirectory(join(dest, entry), dest, log), display: `artifact:${spec.name}` }
+      const { target, packageName } = await packDirectory(join(dest, entry), dest, log)
+      return { target, display: `artifact:${spec.name}`, packageName }
     }
   }
   if (existsSync(join(dest, 'package.json'))) {
-    return { target: await packDirectory(dest, dest, log), display: `artifact:${spec.name}` }
+    const { target, packageName } = await packDirectory(dest, dest, log)
+    return { target, display: `artifact:${spec.name}`, packageName }
   }
   throw new Error(`artifact:${spec.name} 中既没有 *.tgz 也没有含 package.json 的目录`)
 }

@@ -103,22 +103,25 @@ async function main() {
       const bundlesBefore = await readBundles(profileDir)
       const targets = []
       for (const spec of specs) {
-        const { target, display } = await materializePlugin(spec, {
+        const { target, display, packageName } = await materializePlugin(spec, {
           workDir: materializeDir,
           token: inputs.githubToken,
           log: pluginLog,
         })
         pluginLog(`物化 ${spec.raw} → ${target}`)
-        targets.push({ target, display })
+        targets.push({ target, display, packageName })
       }
       await run(process.execPath,
         [bin, 'plugin', '--profile', inputs.profile, 'add', ...targets.map(t => t.target)],
         { env: { ...process.env, DSH_HOME: homeDir, NO_UPDATE_NOTIFIER: '1' }, log: pluginLog })
       const bundlesAfter = await readBundles(profileDir)
       pluginLog(`bundles：${bundlesBefore.length} → ${bundlesAfter.length}`)
-      if (bundlesAfter.length < bundlesBefore.length + specs.length) {
-        failureReasons.push(`插件安装后 dsh.profile.bundles 未全部注册`
-          + `（${bundlesBefore.length} → ${bundlesAfter.length}，预期 +${specs.length}）`)
+      // 校验每个已知包名都注册进了 bundles（profile 复用时数量差值不可靠）
+      const missing = targets
+        .filter(t => t.packageName !== undefined && !bundlesAfter.includes(t.packageName))
+        .map(t => t.packageName)
+      if (missing.length > 0) {
+        failureReasons.push(`插件未注册进 dsh.profile.bundles：${missing.join(', ')}`)
       }
     } else {
       log('未指定插件，跳过插件安装')

@@ -202,7 +202,14 @@ export async function nodeRpc(page, webUrl, endpoint, args) {
  * @param {(line: string) => void} [log]
  */
 export async function ensureSession(page, webUrl, log = () => {}) {
-  const list = await nodeRpc(page, webUrl, 'session/list', { _request: {} })
+  let list
+  try {
+    list = await nodeRpc(page, webUrl, 'session/list', { _request: {} })
+  } catch (error) {
+    // 旧版本 dsh（≤0.1.1）没有 session RPC：降级为纯 UI 模式，不阻断用户脚本
+    log(`session/list 不可用（${error instanceof Error ? error.message : String(error)}），跳过会话预创建`)
+    return
+  }
   if (list?.items?.[0]?.id !== undefined) return
   const created = await nodeRpc(page, webUrl, 'session/create', { request: {} })
   log(`新建会话：${created.sessionId}，刷新页面进入`)
