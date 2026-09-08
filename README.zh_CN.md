@@ -170,7 +170,7 @@ provider 路由（`sim-<协议>`），暴露模型 `test-model`，因此可以�
 
 | API | 行为 |
 | --- | --- |
-| `click(text, opts?)` | 按 role（`button`/`link`/`menuitem`/`tab`，先精确后模糊）点击，回退到可见文本。 |
+| `click(text, opts?)` | 按 role（`button`/`link`/`menuitem`/`tab`，先精确后模糊）点击，回退到可见文本，最后兜底类名/`aria-label` 子串匹配（如 `click('close')` 可命中 `class="kOalmG_close"` 的图标按钮——CSS module 的 hash 前缀会变，子串后缀稳定）。 |
 | `selectWorkspace(path?)` | 经 `workspace/create` RPC 注册/复用目录为工作区并在其中建会话，随后刷新进入（也用于离开设置等子页面）；省略 path 时用系统临时目录下的固定工作区。 |
 | `sendMessage(text)` | 聚焦聊天输入框、填入文本并按 Enter 提交；页面没有可见输入框时（例如还停在“选择工作区”欢迎页）回退到 `session/prompt` RPC 提交。 |
 | `selectModel('provider/model')` | 经页面自身的 `session.selectModel` RPC 在最近一个会话上切换模型。 |

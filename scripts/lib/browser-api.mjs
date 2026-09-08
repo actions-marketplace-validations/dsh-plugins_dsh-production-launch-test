@@ -28,6 +28,9 @@ export async function installBrowserApi(page, { screenshotsDir, log = () => {} }
   await page.exposeFunction('click', async (target, opts = {}) => {
     if (typeof target !== 'string' || target === '') throw new Error('click(text) 需要非空字符串')
     const timeout = Number(opts.timeout ?? 3000)
+    // 类名子串兜底：class="kOalmG_close" 这类图标按钮没有文本/aria-label，
+    // CSS module 的 hash 前缀每次构建都变，但 _close 后缀稳定，子串匹配可用
+    const cls = JSON.stringify(target)
     const candidates = [
       () => page.getByRole('button', { name: target, exact: true }),
       () => page.getByRole('link', { name: target, exact: true }),
@@ -36,6 +39,9 @@ export async function installBrowserApi(page, { screenshotsDir, log = () => {} }
       () => page.getByText(target, { exact: true }),
       () => page.getByRole('button', { name: target }),
       () => page.getByText(target),
+      () => page.locator(
+        `button[class*=${cls} i], [role="button"][class*=${cls} i], a[class*=${cls} i],`
+        + ` [aria-label*=${cls} i]`),
     ]
     for (const make of candidates) {
       const locator = make().first()

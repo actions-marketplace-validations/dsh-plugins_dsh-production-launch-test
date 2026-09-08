@@ -174,7 +174,7 @@ Injected as page globals before your script runs (all async):
 
 | API | Behavior |
 | --- | --- |
-| `click(text, opts?)` | Clicks by role (`button`/`link`/`menuitem`/`tab`, exact then fuzzy) falling back to visible text. |
+| `click(text, opts?)` | Clicks by role (`button`/`link`/`menuitem`/`tab`, exact then fuzzy) falling back to visible text, and finally to class/`aria-label` substring matching (e.g. `click('close')` hits `class="kOalmG_close"` icon buttons — CSS-module hash prefixes change per build, the `_close` suffix substring stays stable). |
 | `selectWorkspace(path?)` | Registers/reuses a directory as a workspace via the `workspace/create` RPC, creates a session in it and reloads into it (also leaves sub-pages like settings); without `path` uses a fixed workspace under the system temp dir. |
 | `sendMessage(text)` | Focuses the chat composer, fills it and submits with Enter; falls back to the `session/prompt` RPC when no composer is visible (e.g. the workspace picker is still showing). |
 | `selectModel('provider/model')` | Calls the page's own `session.selectModel` RPC on the most recent session. |
